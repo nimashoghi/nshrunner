@@ -271,7 +271,7 @@ def picklerunner_main():
 
         # Print the environment information if requested.
         if args.print_environment_info:
-            from ._submit.print_environment_info import print_environment_info
+            from ._print_environment_info import print_environment_info
 
             print_environment_info(log)
 

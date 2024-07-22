@@ -2,7 +2,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
 
-def create_launcher_script_file(
+def _create_launcher_script_file(
     script_path: Path,
     original_command: str | Iterable[str],
     environment: Mapping[str, str],
@@ -65,6 +65,7 @@ def write_helper_script(
     chmod: bool = True,
     prepend_command_with_exec: bool = True,
     command_prefix: str | None = None,
+    file_name: str = "helper.sh",
 ):
     """
     Creates a helper bash script for running the given function.
@@ -81,8 +82,8 @@ def write_helper_script(
         using `singularity exec my_container.sif bash /path/to/helper.sh`.
     """
 
-    out_path = base_dir / "helper.sh"
-    create_launcher_script_file(
+    out_path = base_dir / file_name
+    _create_launcher_script_file(
         out_path,
         command,
         environment,

@@ -16,8 +16,8 @@ from typing import Any, Generic, Literal, Protocol, cast, runtime_checkable
 
 from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack, override
 
-from ._submit.session import unified
-from ._submit.session._script import create_launcher_script_file
+from ._submit import unified
+from ._submit._script import write_helper_script
 from ._util import seed
 from ._util.environment import (
     remove_lsf_environment_variables,
@@ -564,9 +564,8 @@ class Runner(Generic[TConfig, TReturn, Unpack[TArguments]]):
         )
 
         # Create the launcher script
-        launcher_path = config_pickle_save_path / "launcher.sh"
-        create_launcher_script_file(
-            launcher_path,
+        launcher_path = write_helper_script(
+            config_pickle_save_path,
             serialized.bash_command_sequential(
                 pause_before_exit=pause_before_exit,
                 print_environment_info=print_environment_info,
@@ -574,6 +573,7 @@ class Runner(Generic[TConfig, TReturn, Unpack[TArguments]]):
             env,
             setup_commands,
             command_prefix=python_command_prefix,
+            file_name="launcher.sh",
         )
         launcher_command = ["bash", str(launcher_path)]
 
