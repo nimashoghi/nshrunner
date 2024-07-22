@@ -1,5 +1,6 @@
 import contextlib
 import copy
+import logging
 import os
 import shutil
 import subprocess
@@ -10,7 +11,6 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from contextlib import ExitStack
 from functools import wraps
-from logging import getLogger
 from pathlib import Path
 from typing import Any, Generic, Literal, Protocol, cast, runtime_checkable
 
@@ -29,7 +29,7 @@ from .model.config import BaseConfig
 from .snapshot import snapshot_modules
 from .trainer import Trainer
 
-log = getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def _tqdm_if_installed(iterable, *args, **kwargs):
