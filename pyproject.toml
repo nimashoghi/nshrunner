@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.10"
 tqdm = { version = "*", optional = true }
 typing-extensions = "*"
+cloudpickle = "*"
 
 [build-system]
 requires = ["poetry-core"]
