@@ -190,13 +190,6 @@ class LSFJobKwargs(TypedDict, total=False):
     """
 
     # Our own custom options
-    update_kwargs_fn: "Callable[[LSFJobKwargs], LSFJobKwargs]"
-    """
-    A function to update the kwargs with the defaults.
-
-    This is useful for setting the command prefix to be dependent on num nodes/gpus/etc.
-    """
-
     summit: bool
     """
     Whether the job is being submitted to Summit.
@@ -457,10 +450,6 @@ def _update_kwargs(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
     del kwargs_in
 
     kwargs = _update_kwargs_jsrun(kwargs, base_dir)
-
-    if (update_kwargs_fn := kwargs.get("update_kwargs_fn")) is not None:
-        kwargs = copy.deepcopy(update_kwargs_fn(kwargs))
-
     return kwargs
 
 

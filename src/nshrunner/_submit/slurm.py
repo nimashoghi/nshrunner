@@ -261,10 +261,6 @@ class SlurmJobKwargs(TypedDict, total=False):
     The flags to pass to the `srun` command.
     """
 
-    # Our own custom options
-    update_kwargs_fn: "Callable[[SlurmJobKwargs, Path], SlurmJobKwargs]"
-    """A function to update the kwargs."""
-
 
 DEFAULT_KWARGS: SlurmJobKwargs = {
     "name": "ll",
@@ -515,9 +511,6 @@ def _update_kwargs(kwargs: SlurmJobKwargs, base_path: Path):
         command_parts.extend(existing_command_prefix.split())
     # Add the command prefix to the kwargs.
     kwargs["command_prefix"] = " ".join(command_parts)
-
-    if (update_kwargs_fn := kwargs.get("update_kwargs_fn")) is not None:
-        kwargs = copy.deepcopy(update_kwargs_fn(kwargs, base_path))
 
     return kwargs
 
