@@ -1,10 +1,10 @@
 import copy
+import logging
 import os
 import signal
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from datetime import timedelta
-from logging import getLogger
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,7 +23,7 @@ from ._output import SubmitOutput
 TArgs = TypeVarTuple("TArgs")
 _Path: TypeAlias = str | Path | os.PathLike
 
-log = getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class GenericJobKwargs(TypedDict, total=False):

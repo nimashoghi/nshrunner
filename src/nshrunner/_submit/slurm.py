@@ -1,10 +1,10 @@
 import copy
+import logging
 import math
 import os
 import signal
 from collections.abc import Callable, Mapping, Sequence
 from datetime import timedelta
-from logging import getLogger
 from pathlib import Path
 from typing import Any, Literal
 
@@ -13,7 +13,7 @@ from typing_extensions import TypeAlias, TypedDict, TypeVarTuple, Unpack
 from ._output import SubmitOutput
 from ._script import helper_script_to_command, write_helper_script
 
-log = getLogger(__name__)
+log = logging.getLogger(__name__)
 
 TArgs = TypeVarTuple("TArgs")
 
