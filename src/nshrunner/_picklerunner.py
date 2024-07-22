@@ -222,21 +222,6 @@ def _parse_args():
         help="Paths to the sessions to run",
     )
     parser.add_argument(
-        "--unset-cuda",
-        action=argparse.BooleanOptionalAction,
-        help="Unset the CUDA_VISIBLE_DEVICES environment variable",
-    )
-    parser.add_argument(
-        "--unset-env",
-        action="append",
-        help="Unset the environment variable",
-    )
-    parser.add_argument(
-        "--force-env",
-        action="append",
-        help="Force the environment variable to be the provided value, regardless of the current value",
-    )
-    parser.add_argument(
         "--print-environment-info",
         action=argparse.BooleanOptionalAction,
         help="Print the environment information before starting the session",
@@ -305,26 +290,6 @@ def picklerunner_main():
                 )
                 os.environ["CUDA_VISIBLE_DEVICES"] = os.environ["ROCR_VISIBLE_DEVICES"]
                 os.environ.pop("ROCR_VISIBLE_DEVICES")
-
-        # Unset the CUDA_VISIBLE_DEVICES environment variable if requested.
-        if args.unset_cuda:
-            log.critical("Unsetting CUDA_VISIBLE_DEVICES...")
-            os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-            for i in range(40):
-                os.environ.pop(f"CUDA_VISIBLE_DEVICES{i}", None)
-
-        # Unset the environment variables if requested.
-        if args.unset_env:
-            for env in args.unset_env:
-                log.critical(f"Unsetting {env}...")
-                os.environ.pop(env, None)
-
-        # Force the environment variables if requested.
-        if args.force_env:
-            for env in args.force_env:
-                key, value = env.split("=", 1)
-                log.critical(f"Forcing {key}={value}...")
-                os.environ[key] = value
 
         paths = list(_resolve_paths(args.paths))
         if not paths:
