@@ -536,7 +536,7 @@ def to_array_batch_script(
     Create the batch script for the job.
     """
 
-    from ..._picklerunner import serialize_many
+    from .._picklerunner import serialize_many
 
     kwargs = _update_kwargs(kwargs, dest)
 
