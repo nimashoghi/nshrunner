@@ -5,8 +5,9 @@ import signal
 from collections.abc import Callable, Mapping, Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
+from deepmerge import always_merger
 from typing_extensions import TypeAlias, TypedDict, TypeVarTuple, Unpack
 
 from ._output import SubmitOutput
@@ -379,7 +380,6 @@ def _write_batch_script_to_file(
             f.write(f"#BSUB -wt {signal_time}\n")
 
         f.write("\n")
-
         f.write("\n")
 
         if (command_prefix := kwargs.get("command_prefix")) is not None:
@@ -395,14 +395,16 @@ def _write_batch_script_to_file(
 
 def _update_kwargs(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
     # Update the kwargs with the default values
+    global DEFAULT_KWARGS
     kwargs = copy.deepcopy(DEFAULT_KWARGS)
 
     # If the job is being submitted to Summit, update the kwargs with the Summit defaults
     if kwargs_in.get("summit"):
-        kwargs.update(SUMMIT_DEFAULTS)
+        global SUMMIT_DEFAULTS
+        kwargs = cast(LSFJobKwargs, always_merger.merge(kwargs, SUMMIT_DEFAULTS))
 
     # Update the kwargs with the provided values
-    kwargs.update(kwargs_in)
+    kwargs = cast(LSFJobKwargs, always_merger.merge(kwargs, kwargs_in))
     del kwargs_in
 
     kwargs = _update_kwargs_jsrun(kwargs, base_dir)
