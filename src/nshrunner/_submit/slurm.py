@@ -6,8 +6,9 @@ import signal
 from collections.abc import Callable, Mapping, Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
+from deepmerge import always_merger
 from typing_extensions import TypeAlias, TypedDict, TypeVarTuple, Unpack
 
 from ._output import SubmitOutput
@@ -264,12 +265,12 @@ class SlurmJobKwargs(TypedDict, total=False):
 
 DEFAULT_KWARGS: SlurmJobKwargs = {
     "name": "ll",
-    "nodes": 1,
+    # "nodes": 1,
     # "time": timedelta(hours=2),
     "signal": signal.SIGURG,
     "signal_delay": timedelta(seconds=90),
     "open_mode": "append",
-    "requeue": True,
+    # "requeue": True,
 }
 
 
@@ -451,10 +452,13 @@ def _write_batch_script_to_file(
     return path
 
 
-def _update_kwargs(kwargs: SlurmJobKwargs, base_path: Path):
+def _update_kwargs(kwargs_in: SlurmJobKwargs, base_path: Path):
     # Update the kwargs with the default values
-    kwargs = copy.deepcopy(kwargs)
-    kwargs = {**DEFAULT_KWARGS, **kwargs}
+    kwargs = copy.deepcopy(DEFAULT_KWARGS)
+
+    # Merge the kwargs
+    kwargs = cast(SlurmJobKwargs, always_merger.merge(kwargs, kwargs_in))
+    del kwargs_in
 
     # If out/err files are not specified, set them
     logs_base = base_path.parent / "logs"
