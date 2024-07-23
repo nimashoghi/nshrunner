@@ -162,4 +162,8 @@ def _ensure_supported():
 def snapshot_modules(config: SnapshotConfig):
     _ensure_supported()
 
+    # Add a .nshrunner-snapshot file to the directory
+    # with the JSON-serialized config
+    (config.dir / ".nshrunner-snapshot").write_text(config.model_dump_json(indent=2))
+
     return _snapshot_modules(config.dir, config.modules)

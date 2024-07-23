@@ -8,6 +8,8 @@ from typing import Any, TypeAlias
 import nshconfig as C
 from typing_extensions import TypedDict, assert_never
 
+from .._util.git import _gitignored_dir
+
 log = logging.getLogger(__name__)
 
 SNAPSHOT_DIR_NAME_DEFAULT = "nshrunner_snapshots"
@@ -87,7 +89,5 @@ def _resolve_dir(base_dir: Path | None = None):
         base_dir.mkdir(exist_ok=True, parents=True)
 
     id_ = f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}--{str(uuid.uuid4())}"
-    dir_ = base_dir / "snapshots" / id_
-    dir_.mkdir(exist_ok=True, parents=True)
-
+    dir_ = _gitignored_dir(_gitignored_dir(base_dir / "snapshots") / id_)
     return dir_

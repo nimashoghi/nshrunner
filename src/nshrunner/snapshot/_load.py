@@ -6,8 +6,6 @@ from typing import Literal
 
 from typing_extensions import assert_never
 
-from ._constant import SNAPSHOT_DIR_NAME_DEFAULT
-
 log = logging.getLogger(__name__)
 
 

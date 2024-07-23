@@ -1,1 +1,0 @@
-SNAPSHOT_DIR_NAME_DEFAULT = "ll_snapshot"
