@@ -9,7 +9,7 @@ import sys
 import traceback
 import uuid
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property, wraps
 from pathlib import Path
@@ -52,85 +52,7 @@ from .trainer import Trainer
 log = logging.getLogger(__name__)
 
 
-def _tqdm_if_installed(iterable, *args, **kwargs):
-    try:
-        from tqdm.auto import tqdm
-
-        return tqdm(iterable, *args, **kwargs)
-    except ImportError:
-        return iterable
-
-
-class SnapshotConfig(TypedDict, total=False):
-    dir: Path
-    """The directory to save snapshots to. Default: `{cwd}/ll-{id}/snapshot`."""
-
-    snapshot_ll: bool
-    """Whether to snapshot the `ll` module. Default: `True`."""
-
-    snapshot_config_cls_module: bool
-    """Whether to snapshot the module of the config class. Default: `True`."""
-
-    modules: list[str]
-    """Additional modules to snapshot. Default: `[]`."""
-
-
-SNAPSHOT_CONFIG_DEFAULT = SnapshotConfig(
-    snapshot_ll=False,
-    snapshot_config_cls_module=True,
-)
-
-
-# TConfig = TypeVar("TConfig", bound=BaseConfig, infer_variance=True)
-# TReturn = TypeVar("TReturn", infer_variance=True)
-# TArguments = TypeVarTuple("TArguments")
-# P = ParamSpec("P")
-
-
-def _validate_runs(runs: list[tuple[TConfig, tuple[Unpack[TArguments]]]]):
-    if not runs:
-        raise ValueError("No run configs provided.")
-
-    # Make sure there are no duplicate ids
-    id_counter = Counter(config.id for config, _ in runs if config.id is not None)
-    if duplicate_ids := {id for id, count in id_counter.items() if count > 1}:
-        raise ValueError(
-            f"Duplicate run IDs found: {duplicate_ids}. Each run must have a unique ID."
-        )
-
-
-def _resolve_run(
-    run: TConfig | tuple[TConfig, Unpack[TArguments]],
-    copy_config: bool = True,
-    reset_id: bool = False,
-) -> tuple[TConfig, tuple[Unpack[TArguments]]]:
-    if isinstance(run, tuple):
-        (config, *args) = run
-    else:
-        config = cast(TConfig, run)
-        args = ()
-    args = cast(tuple[Unpack[TArguments]], args)
-    if copy_config:
-        config = copy.deepcopy(config)
-    if reset_id:
-        config.id = BaseConfig.generate_id(ignore_rng=True)
-    return (config, args)
-
-
-def _resolve_runs(
-    runs: Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]],
-    copy_config: bool = True,
-    reset_id: bool = False,
-    validate: bool = False,
-):
-    resolved: list[tuple[TConfig, tuple[Unpack[TArguments]]]] = []
-    for run in runs:
-        resolved.append(_resolve_run(run, copy_config=copy_config, reset_id=reset_id))
-
-    if validate:
-        _validate_runs(resolved)
-
-    return resolved
+T = TypeVar("T", infer_variance=True)
 
 
 _Path: TypeAlias = str | Path | os.PathLike
@@ -170,6 +92,18 @@ class Config(C.Config):
 
     env: Mapping[str, str] | None = None
     """Environment variables to set for the session."""
+
+    validate_no_duplicate_ids: bool = True
+    """Whether to validate that there are no duplicate IDs in the runs."""
+
+
+def _tqdm_if_installed(iterable: Iterable[T], *args, **kwargs) -> Iterable[T]:
+    try:
+        from tqdm.auto import tqdm
+
+        return cast(Iterable[T], tqdm(iterable, *args, **kwargs))
+    except ImportError:
+        return iterable
 
 
 def _wrap_run_fn(
@@ -260,8 +194,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         field(default_factory=lambda: [])
     )
 
-    @property
-    def _transform_fn(self, *args: Unpack[TArguments]) -> tuple[Unpack[TArguments]]:
+    def _transform(self, *args: Unpack[TArguments]) -> tuple[Unpack[TArguments]]:
         for transform_fn in self.transform_fns:
             args = transform_fn(*copy.deepcopy(args))
         return args
@@ -281,12 +214,10 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
     ):
         return replace(self, transform_fns=[*self.transform_fns, transform_fn])
 
-    def _get_base_path(self, runs: Sequence[tuple[Unpack[TArguments]]]):
+    def _root_dir(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         # If the user has provided a `savedir`, use that as the base path.
         if (savedir := self.config.savedir) is not None:
-            base_path = Path(savedir)
-            base_path.mkdir(exist_ok=True, parents=True)
-            return base_path
+            return _gitignored_dir(Path(savedir) / "nshrunner", create=True)
 
         # If all configs have the same `project_root` config, use that instead.
         project_root_paths = set(self.info_fn(*args).get("base_dir") for args in runs)
@@ -301,6 +232,22 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         return _gitignored_dir(project_root_path / "nshrunner", create=True)
 
+    def _resolve_runs(self, runs: Sequence[tuple[Unpack[TArguments]]]):
+        # First, run all the transforms
+        runs = [self._transform(*args) for args in runs]
+
+        # Validate that there are no duplicate IDs
+        if self.config.validate_no_duplicate_ids:
+            ids = [
+                id_
+                for args in runs
+                if (id_ := self.info_fn(*args).get("id")) is not None
+            ]
+            if len(ids) != len(set(ids)):
+                raise ValueError("Duplicate IDs found in the runs.")
+
+        return runs
+
     def local(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         """
         Runs a list of configs locally.
@@ -310,69 +257,9 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         runs : Sequence[tuple[Unpack[TArguments]]]
             A sequence of runs to run.
         """
-        for args in runs:
+        runs = self._resolve_runs(runs)
+        for args in _tqdm_if_installed(runs):
             yield self.run_fn(*args)
-
-    def fast_dev_run(
-        self,
-        runs: Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]],
-        n_batches: int = 1,
-        *,
-        gpus: Sequence[int] | None = None,
-        env: Mapping[str, str] | None = None,
-        stop_on_error: bool = True,
-        reset_memory_caches: bool = True,
-        reset_ids: bool = True,
-    ):
-        """
-        Runs a list of configs locally with `LightningTrainer.fast_dev_run = True`.
-
-        Parameters
-        ----------
-        runs : Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]]
-            A sequence of runs to submit.
-        n_batches : int, optional
-            The number of batches to run for `fast_dev_run`.
-        gpus : Sequence[int], optional
-            The GPUs to use for the runs.
-        env : Mapping[str, str], optional
-            Additional environment variables to set.
-        stop_on_error : bool, optional
-            Whether to stop on error.
-        reset_memory_caches : bool, optional
-            Whether to reset memory caches after each run.
-        reset_ids : bool, optional
-            Whether to reset the id of the runs before running them. This prevents the
-            dev runs' logs from overwriting the main runs' logs.
-        """
-        resolved_runs = _resolve_runs(
-            runs, copy_config=True, reset_id=reset_ids, validate=True
-        )
-
-        return_values: list[TReturn] = []
-        with self._with_env(env or {}):
-            for config, args in _tqdm_if_installed(resolved_runs, desc="Fast dev run"):
-                run_id = config.id
-                run_name = config.run_name
-                try:
-                    if gpus is not None:
-                        config.trainer.accelerator = "gpu"
-                        config.trainer.devices = gpus
-                    config.trainer.fast_dev_run = n_batches
-                    return_values.append(self._run_fn(config, *args))
-                except BaseException as e:
-                    log.critical(f"Error in run with {run_id=} ({run_name=}): {e}")
-                    if stop_on_error:
-                        raise
-                    else:
-                        # Print full traceback
-                        traceback.print_exc()
-                finally:
-                    # After each run, we should reset memory/caches
-                    if reset_memory_caches:
-                        self._reset_memory_caches()
-
-        return return_values
 
     def session(
         self,
@@ -491,95 +378,6 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         return command
 
-    def fast_dev_run_session(
-        self,
-        runs: Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]],
-        n_batches: int = 1,
-        *,
-        snapshot: bool | SnapshotConfig = False,
-        gpus: Sequence[int] | None = None,
-        env: Mapping[str, str] | None = None,
-        setup_commands: Sequence[str] | None = None,
-        activate_venv: bool = True,
-        print_environment_info: bool = False,
-        pause_before_exit: bool = False,
-        attach: bool = True,
-        print_command: bool = True,
-        reset_ids: bool = True,
-        python_command_prefix: str | None = None,
-        run_git_pre_commit_hook: bool = True,
-    ):
-        """
-        Runs a list of configs locally with `LightningTrainer.fast_dev_run = True`.
-
-        Parameters
-        ----------
-        runs : Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]]
-            A sequence of runs to submit.
-        n_batches : int, optional
-            The number of batches to run for `fast_dev_run`.
-        snapshot : bool | Path, optional
-            The base path to save snapshots to. If `True`, a default path will be used. If `False`, no snapshots will be taken.
-        gpus : Sequence[int], optional
-            The GPUs to use for the runs.
-        env : Mapping[str, str], optional
-            Additional environment variables to set.
-        setup_commands : Sequence[str], optional
-            A list of commands to run at the beginning of the shell script.
-        activate_venv : bool, optional
-            Whether to activate the virtual environment before running the jobs.
-        print_environment_info : bool, optional
-            Whether to print the environment information before starting each job.
-        pause_before_exit : bool, optional
-            Whether to pause before exiting the screen session.
-        attach : bool, optional
-            Whether to attach to the screen session after launching it.
-        print_command : bool, optional
-            Whether to print the command to the console.
-        reset_ids : bool, optional
-            Whether to reset the id of the runs before running them. This prevents the
-            dev runs' logs from overwriting the main runs' logs.
-        python_command_prefix : str, optional
-            A prefix to add to the Python command. This would be used, for example, to run the Python command with a profiler (e.g., nsight-sys).
-        run_git_pre_commit_hook : bool, optional
-            Whether to run the Git pre-commit hook before launching the sessions.
-        """
-        resolved_runs = _resolve_runs(
-            runs, copy_config=True, reset_id=reset_ids, validate=True
-        )
-        for config, _ in resolved_runs:
-            config.trainer.fast_dev_run = n_batches
-            if gpus is not None:
-                config.trainer.accelerator = "gpu"
-                config.trainer.devices = gpus
-
-        return self.session(
-            [(configs, *args) for configs, args in resolved_runs],
-            snapshot=snapshot,
-            name="ll-fast_dev_run",
-            env=env,
-            setup_commands=setup_commands,
-            attach=attach,
-            print_command=print_command,
-            activate_venv=activate_venv,
-            print_environment_info=print_environment_info,
-            pause_before_exit=pause_before_exit,
-            python_command_prefix=python_command_prefix,
-            run_git_pre_commit_hook=run_git_pre_commit_hook,
-        )
-
-    def _reset_memory_caches(self):
-        import gc
-
-        import torch
-
-        # Clear the memory caches
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
-        torch.cuda.reset_accumulated_memory_stats()
-        torch.cuda.synchronize()
-        gc.collect()
-
     def _local_data_path(
         self,
         id: str,
@@ -599,62 +397,6 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         local_data_path.mkdir(exist_ok=True)
 
         return local_data_path
-
-    def _snapshot(
-        self,
-        snapshot: bool | SnapshotConfig,
-        resolved_runs: list[tuple[TConfig, tuple[Unpack[TArguments]]]],
-        local_data_path: Path,
-    ):
-        # Handle snapshot
-        snapshot_config: SnapshotConfig | None = None
-        if snapshot is True:
-            snapshot_config = {**SNAPSHOT_CONFIG_DEFAULT}
-        elif snapshot is False:
-            snapshot_config = None
-        elif isinstance(snapshot, Mapping):
-            snapshot_config = {**SNAPSHOT_CONFIG_DEFAULT, **snapshot}
-
-        del snapshot
-        if snapshot_config is None:
-            return None
-
-        # Set the snapshot base to the user's home directory
-        snapshot_dir = snapshot_config.get("dir", local_data_path / "snapshot")
-        snapshot_dir.mkdir(exist_ok=True, parents=True)
-
-        snapshot_modules_set: set[str] = set()
-        snapshot_modules_set.update(snapshot_config.get("modules", []))
-        if snapshot_config.get("snapshot_ll", True):
-            # Resolve ll by taking the module of the runner class
-            ll_module = self.__class__.__module__.split(".", 1)[0]
-            if ll_module != "ll":
-                log.warning(
-                    f"Runner class {self.__class__.__name__} is not in the 'll' module.\n"
-                    "This is unexpected and may lead to issues with snapshotting."
-                )
-            snapshot_modules_set.add(ll_module)
-        if snapshot_config.get("snapshot_config_cls_module", True):
-            for config, _ in resolved_runs:
-                # Resolve the root module of the config class
-                # NOTE: We also must handle the case where the config
-                #   class's module is "__main__" (i.e. the config class
-                #   is defined in the main script).
-                module = config.__class__.__module__
-                if module == "__main__":
-                    log.warning(
-                        f"Config class {config.__class__.__name__} is defined in the main script.\n"
-                        "Snapshotting the main script is not supported.\n"
-                        "Skipping snapshotting of the config class's module."
-                    )
-                    continue
-
-                # Make sure to get the root module
-                module = module.split(".", 1)[0]
-                snapshot_modules_set.add(module)
-
-        snapshot_path = _snapshot_modules(snapshot_dir, list(snapshot_modules_set))
-        return snapshot_path.absolute()
 
     @remove_lsf_environment_variables()
     @remove_slurm_environment_variables()
