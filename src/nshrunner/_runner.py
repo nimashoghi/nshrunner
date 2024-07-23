@@ -10,7 +10,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
-from typing import Generic, TypeAlias, cast
+from typing import Any, Generic, TypeAlias, cast
 
 import nshconfig as C
 from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack
@@ -182,10 +182,6 @@ def _shell_hook(env_path: Path):
         return f'source "{env_path}/bin/activate"'
     else:
         raise ValueError(f"Unable to detect the environment type for {env_path}")
-
-
-# def runner(config: IntoRunner):
-#     pass
 
 
 @dataclass(frozen=True)
@@ -549,3 +545,45 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             )
 
         return submission
+
+
+class RunnerConfigDict(TypedDict, total=False):
+    savedir: _Path
+    """
+    The `savedir` parameter is a string that represents the directory where the program will save its execution files and logs.
+        This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
+        If `None`, this will default to the current working directory / `llrunner`.
+    """
+
+    python_logging: PythonLoggingConfig
+    """Logging configuration for the runner."""
+
+    seed: SeedConfig
+    """Seed configuration for the runner."""
+
+    env: Mapping[str, str]
+    """Environment variables to set for the session."""
+
+    validate_no_duplicate_ids: bool
+    """Whether to validate that there are no duplicate IDs in the runs."""
+
+    snapshot_env_name: str
+    """The name of the environment variable to set the snapshot path to."""
+
+
+def runner(
+    run_fn: Callable[[Unpack[TArguments]], TReturn],
+    info_fn: Callable[[Unpack[TArguments]], RunInfo] = _default_info_fn,
+    validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None] = (
+        _default_validate_fn
+    ),
+    transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]] = [],
+    **config: RunnerConfigDict,
+):
+    return Runner(
+        config=Config(**cast(Any, config)),
+        run_fn=run_fn,
+        info_fn=info_fn,
+        validate_fn=validate_fn,
+        transform_fns=transform_fns,
+    )
