@@ -8,14 +8,20 @@ import sys
 import traceback
 import uuid
 from collections import Counter
-from collections.abc import Mapping, Sequence
-from contextlib import ExitStack
+from collections.abc import Callable, Mapping, Sequence
 from functools import wraps
 from pathlib import Path
-from typing import Any, Generic, Literal, Protocol, cast, runtime_checkable
+from typing import Any, Generic, Literal, Protocol, TypeAlias, cast, runtime_checkable
 
 import nshconfig as C
-from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack, override
+from typing_extensions import (
+    ParamSpec,
+    TypedDict,
+    TypeVar,
+    TypeVarTuple,
+    Unpack,
+    override,
+)
 
 from ._submit import unified
 from ._submit._script import write_helper_script
@@ -62,13 +68,10 @@ SNAPSHOT_CONFIG_DEFAULT = SnapshotConfig(
 )
 
 
-class RunnerConfig(C.Config):
-    pass
-
-
 TConfig = TypeVar("TConfig", bound=BaseConfig, infer_variance=True)
-TReturn = TypeVar("TReturn", default=None, infer_variance=True)
-TArguments = TypeVarTuple("TArguments", default=Unpack[tuple[()]])
+TReturn = TypeVar("TReturn", infer_variance=True)
+TArguments = TypeVarTuple("TArguments")
+P = ParamSpec("P")
 
 
 def _validate_runs(runs: list[tuple[TConfig, tuple[Unpack[TArguments]]]]):
@@ -117,110 +120,56 @@ def _resolve_runs(
     return resolved
 
 
+_Path: TypeAlias = str | Path | os.PathLike
+
+
 @runtime_checkable
-class RunProtocol(Protocol[TConfig, TReturn, Unpack[TArguments]]):
-    def __call__(self, config: TConfig, *args: Unpack[TArguments]) -> TReturn: ...
+class RunProtocol(Protocol[Unpack[TArguments], TReturn]):
+    def __call__(self, *args: Unpack[TArguments]) -> TReturn: ...
 
 
-class Runner(Generic[TConfig, TReturn, Unpack[TArguments]]):
+class RunInformation(TypedDict, total=False):
+    id: str
+    base_dir: _Path
+
+
+class Config(C.Config):
+    savedir: _Path | None = None
+    """
+    The `savedir` parameter is a string that represents the directory where the program will save its execution files and logs.
+        This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
+        If `None`, this will default to the current working directory / `llrunner`.
+    """
+    validate_config_before_run: bool = True
+    validate_strict: bool = True
+
+    env: Mapping[str, str] | None = None
+    """Environment variables to set for the session."""
+
+
+class Runner(Generic[P, TReturn]):
     DEFAULT_ENV: dict[str, str] = {}
     SNAPSHOT_ENV_NAME = "LL_SNAPSHOT"
 
-    @classmethod
-    def active_snapshot(cls) -> Path | None:
-        if (snapshot := os.environ.get(cls.SNAPSHOT_ENV_NAME)) is not None:
-            return Path(snapshot)
-        return None
-
-    @override
     def __init__(
         self,
-        run: RunProtocol[TConfig, TReturn, Unpack[TArguments]],
-        *,
-        savedir: str | Path | os.PathLike | None = None,
-        job_name: str = "ll",
-        validate_config_before_run: bool = True,
-        validate_strict: bool = True,
-        env: Mapping[str, str] | None = None,
+        config: Config,
+        run_fn: Callable[P, TReturn],
+        info_fn: Callable[P, RunInformation] | None = None,
     ):
-        """This is the initialization function for a class that takes in a run protocol, an auto wrap run
-        boolean, and a slurm job name string.
-
-        Parameters
-        ----------
-        run : RunProtocol[TConfig, Unpack[TArguments]]
-            `run` is an instance of a class that implements the `RunProtocol` interface. It represents the main function or entry point of the program that will be executed.
-        savedir : Path, optional
-            The `savedir` parameter is a string that represents the directory where the program will save its execution files and logs.
-            This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
-            If `None`, this will default to the current working directory / `llrunner`.
-        job_name : str, optional
-            The `job_name` parameter is a string that represents the name of the job when submitting it to a cluster.
-        validate_config_before_run : bool, optional
-            The `validate_config_before_run` parameter is a boolean that represents whether or not to validate the configuration before running the program.
-        validate_strict: bool, optional
-            Should `validate_config_before_run` be strict? If `True`, the configuration will be validated strictly. If `False`, the configuration will be validated non-strictly.
-        """
-
-        super().__init__()
-
-        self._run = run
-        self._savedir = savedir
-        self.job_name = job_name
-        self.validate_config_before_run = validate_config_before_run
-        self.validate_strict = validate_strict
-        self._init_kwargs = {
-            "savedir": savedir,
-            "job_name": job_name,
-            "validate_config_before_run": validate_config_before_run,
-            "validate_strict": validate_strict,
-        }
-        self.env: dict[str, str] = {
-            **self.DEFAULT_ENV,
-            **(env or {}),
-        }
-
-    def _run_git_pre_commit_hook(self):
-        git_dir = self._find_git_dir()
-        if not git_dir:
-            log.info("Not a git repository. Skipping pre-commit hook.")
-            return True
-
-        pre_commit_hook = git_dir / "hooks" / "pre-commit"
-        if not pre_commit_hook.exists():
-            log.info("No pre-commit hook found. Skipping.")
-            return True
-
-        try:
-            result = subprocess.run(
-                [str(pre_commit_hook)],
-                check=True,
-                capture_output=True,
-                text=True,
-                cwd=git_dir.parent,
-            )
-            log.info("Git pre-commit hook passed successfully.")
-            return True
-        except subprocess.CalledProcessError as e:
-            log.error(f"Git pre-commit hook failed. Output:\n{e.stdout}\n{e.stderr}")
-            return False
-
-    def _find_git_dir(self):
-        current_dir = Path.cwd()
-        while current_dir != current_dir.parent:
-            git_dir = current_dir / ".git"
-            if git_dir.is_dir():
-                return git_dir
-            current_dir = current_dir.parent
-        return None
+        self.config = config
+        self.run_fn = run_fn
+        if info_fn is None:
+            info_fn = lambda *_args, **_kwargs: {}  # noqa: E731
+        self.info_fn = info_fn
 
     def _get_base_path(
         self,
         runs: list[tuple[TConfig, tuple[Unpack[TArguments]]]] | None,
     ):
         # If the user has provided a `savedir`, use that as the base path.
-        if self._savedir is not None:
-            base_path = Path(self._savedir)
+        if (savedir := self.config.savedir) is not None:
+            base_path = Path(savedir)
             base_path.mkdir(exist_ok=True, parents=True)
             return base_path
 
@@ -264,54 +213,6 @@ class Runner(Generic[TConfig, TReturn, Unpack[TArguments]]):
             ),
         )
 
-    def _dump_run_information(self, config: BaseConfig):
-        try:
-            import yaml
-
-        except ImportError:
-            log.warning("Failed to import `yaml`. Skipping dumping of run information.")
-            return
-
-        dump_dir = config.directory.resolve_subdirectory(config.id, "stdio") / "dump"
-
-        # Create a different directory for each rank.
-        # Easy way for now: Add a random subdir.
-        dump_dir = dump_dir / f"rank_{str(uuid.uuid4())}"
-        dump_dir.mkdir(parents=True, exist_ok=True)
-
-        # First, dump the full config
-        full_config_path = dump_dir / "config.yaml"
-        config_dict = config.model_dump(mode="json")
-        with full_config_path.open("w") as file:
-            yaml.dump(config_dict, file)
-
-        # Dump all environment variables
-        env_vars_path = dump_dir / "env.yaml"
-        env_vars = dict(os.environ)
-        with env_vars_path.open("w") as file:
-            yaml.dump(env_vars, file)
-
-        # Dump the output of `nvidia-smi` to a file (if available)
-        # First, resolve either `nvidia-smi` or `rocm-smi` (for AMD GPUs)
-        if not (smi_exe := self._resolve_gpu_smi()):
-            return
-
-        nvidia_smi_path = dump_dir / "nvidia_smi_output.log"
-        try:
-            with nvidia_smi_path.open("w") as file:
-                subprocess.run([smi_exe], stdout=file, stderr=subprocess.PIPE)
-        except FileNotFoundError:
-            log.warning(f"Failed to run `{smi_exe}`.")
-
-    def _resolve_gpu_smi(self):
-        if shutil.which("nvidia-smi"):
-            return "nvidia-smi"
-        elif shutil.which("rocm-smi"):
-            return "rocm-smi"
-        else:
-            log.warning("No GPU monitoring tool found.")
-            return None
-
     @property
     def _run_fn(self) -> RunProtocol[TConfig, TReturn, Unpack[TArguments]]:
         run = self._run
@@ -320,7 +221,7 @@ class Runner(Generic[TConfig, TReturn, Unpack[TArguments]]):
         def wrapped_run(config: TConfig, *args: Unpack[TArguments]) -> TReturn:
             nonlocal self
 
-            with ExitStack() as stack:
+            with contextlib.ExitStack() as stack:
                 nonlocal run
 
                 # If `validate_config_before_run`, we validate the configuration before running the program.
@@ -354,20 +255,6 @@ class Runner(Generic[TConfig, TReturn, Unpack[TArguments]]):
             raise RuntimeError("ExitStack should never raise an exception")
 
         return wrapped_run
-
-    @contextlib.contextmanager
-    def _with_env(self, env: Mapping[str, str]):
-        env_old = {k: os.environ.get(k, None) for k in env}
-        os.environ.update(env)
-        try:
-            yield
-        finally:
-            for new_env_key in env.keys():
-                # If we didn't have the key before, remove it
-                if (old_value := env_old.get(new_env_key)) is None:
-                    _ = os.environ.pop(new_env_key, None)
-                else:
-                    os.environ[new_env_key] = old_value
 
     def local(
         self,
