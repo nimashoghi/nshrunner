@@ -69,10 +69,10 @@ SNAPSHOT_CONFIG_DEFAULT = SnapshotConfig(
 )
 
 
-TConfig = TypeVar("TConfig", bound=BaseConfig, infer_variance=True)
-TReturn = TypeVar("TReturn", infer_variance=True)
-TArguments = TypeVarTuple("TArguments")
-P = ParamSpec("P")
+# TConfig = TypeVar("TConfig", bound=BaseConfig, infer_variance=True)
+# TReturn = TypeVar("TReturn", infer_variance=True)
+# TArguments = TypeVarTuple("TArguments")
+# P = ParamSpec("P")
 
 
 def _validate_runs(runs: list[tuple[TConfig, tuple[Unpack[TArguments]]]]):
@@ -129,6 +129,10 @@ class RunProtocol(Protocol[Unpack[TArguments], TReturn]):
     def __call__(self, *args: Unpack[TArguments]) -> TReturn: ...
 
 
+TArguments = TypeVarTuple("TArguments")
+TReturn = TypeVar("TReturn", infer_variance=True)
+
+
 class RunInformation(TypedDict, total=False):
     id: str
     """The ID of the run."""
@@ -160,47 +164,50 @@ class Config(C.Config):
 
 def _wrap_run_fn(
     config: Config,
-    run_fn: Callable[P, TReturn],
-    info_fn: Callable[P, RunInformation],
-    validate_fn: Callable[P, None],
+    run_fn: Callable[[Unpack[TArguments]], TReturn],
+    info_fn: Callable[[Unpack[TArguments]], RunInformation],
+    validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None],
 ):
     @functools.wraps(run_fn)
-    def wrapped_run_fn(*args: P.args, **kwargs: P.kwargs) -> TReturn:
+    def wrapped_run_fn(*args: Unpack[TArguments]) -> TReturn:
         # Validate the configuration
-        validate_fn(*args, **kwargs)
+        if (validate_out := validate_fn(*args)) is not None and isinstance(
+            validate_out, tuple
+        ):
+            args = validate_out
 
         # Get the run info
-        run_info = info_fn(*args, **kwargs)
+        run_info = info_fn(*args)
 
         # Set up Python logging
         if not run_info.get("skip_python_logging", False):
             init_python_logging(config.python_logging)
 
-        return run_fn(*args, **kwargs)
+        return run_fn(*args)
 
     return wrapped_run_fn
 
 
-class Runner(Generic[P, TReturn]):
+class Runner(Generic[Unpack[TArguments], TReturn]):
     DEFAULT_ENV: dict[str, str] = {}
     SNAPSHOT_ENV_NAME = "LL_SNAPSHOT"
 
     def __init__(
         self,
         config: Config,
-        run_fn: Callable[P, TReturn],
-        info_fn: Callable[P, RunInformation] | None = None,
-        validate_fn: Callable[P, None] | None = None,
+        run_fn: Callable[[Unpack[TArguments]], TReturn],
+        info_fn: Callable[[Unpack[TArguments]], RunInformation] | None = None,
+        validate_fn: Callable[[Unpack[TArguments]], None] | None = None,
     ):
         self.config = config
         del config
         if info_fn is None:
-            info_fn = lambda *_args, **_kwargs: {}  # noqa: E731
+            info_fn = lambda *_: {}  # noqa: E731
         self.info_fn = info_fn
         del info_fn
 
         if validate_fn is None:
-            validate_fn = lambda *_args, **_kwargs: None  # noqa: E731
+            validate_fn = lambda *_: None  # noqa: E731
         self.validate_fn = validate_fn
         del validate_fn
 
