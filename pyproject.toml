@@ -13,6 +13,9 @@ cloudpickle = "*"
 deepmerge = "*"
 nshconfig = "^0.2.0"
 
+[tool.poetry.scripts]
+nshrunner-picklerunner = "nshrunner.picklerunner.main:main"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
