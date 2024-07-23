@@ -2,7 +2,6 @@ import argparse
 import contextlib
 import logging
 import os
-import uuid
 from collections.abc import Mapping, Sequence
 from os import PathLike
 from pathlib import Path
