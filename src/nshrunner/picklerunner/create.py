@@ -13,6 +13,21 @@ from ._types import SerializedFunctionCallDict
 _Path: TypeAlias = str | Path | PathLike
 
 
+def _runner_name():
+    # This module is nshrunner.picklerunner.create
+    # We want "nshrunner.picklerunner.main"
+
+    # Get the name of the current module
+    module_name = __name__
+    # Split the module name into parts
+    parts = module_name.split(".")
+    # Replace the last part with "main"
+    parts[-1] = "main"
+    # Join the parts back together
+    new_module_name = ".".join(parts)
+    return new_module_name
+
+
 @dataclass(frozen=True)
 class _SerializedFunction(PathLike):
     path: Path
@@ -26,7 +41,7 @@ class _SerializedFunction(PathLike):
         return [
             python_executable,
             "-m",
-            __name__,
+            _runner_name(),
             str(self.path),
             *self._additional_command_parts,
         ]
@@ -74,10 +89,10 @@ class SerializedMultiFunction(PathLike):
 
         command: list[str] = []
 
-        # command = f'{python_executable} -m {__name__} "{str(self.base_dir.absolute())}/${{{job_index_variable}}}.pkl"'
+        # command = f'{python_executable} -m {_runner_name()} "{str(self.base_dir.absolute())}/${{{job_index_variable}}}.pkl"'
         command.append(python_executable)
         command.append("-m")
-        command.append(__name__)
+        command.append(_runner_name())
 
         if environment:
             for key, value in environment.items():
@@ -112,10 +127,10 @@ class SerializedMultiFunction(PathLike):
         all_files = [f'"{str(fn.path.absolute())}"' for fn in self.functions]
 
         command: list[str] = []
-        # command = f"{python_executable} -m {__name__} {all_files}"
+        # command = f"{python_executable} -m {_runner_name()} {all_files}"
         command.append(python_executable)
         command.append("-m")
-        command.append(__name__)
+        command.append(_runner_name())
 
         if environment:
             for key, value in environment.items():

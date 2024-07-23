@@ -8,7 +8,7 @@ from os import PathLike
 from pathlib import Path
 from typing import TypeAlias, cast
 
-import cloudpickle as pickle
+import cloudpickle
 
 from ._types import SerializedFunctionCallDict
 
@@ -21,7 +21,7 @@ def _execute_single(path: _Path):
         raise FileNotFoundError(f"Path {path} does not exist")
 
     with path.open("rb") as file:
-        d = pickle.load(file)
+        d = cloudpickle.load(file)
 
     # Validate the dict.
     assert isinstance(d, Mapping), f"Expected a dict, got {type(d)}"
@@ -166,7 +166,7 @@ def main():
             result_path = _to_result_path(path)
             log.critical(f"Saving result to {result_path}...")
             with result_path.open("wb") as file:
-                pickle.dump(result, file)
+                cloudpickle.dump(result, file)
 
         log.critical("Finished running all sessions.")
 

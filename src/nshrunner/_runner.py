@@ -172,8 +172,16 @@ def _default_validate_fn(*args: Unpack[TArguments]) -> None:
     pass
 
 
-def _shell_hook():
-    return f'eval "$(conda shell.bash hook)" && conda activate {sys.prefix}'
+def _shell_hook(env_path: Path):
+    # Detect the environment type
+    if env_path.joinpath("conda-meta", "history").exists():
+        # Conda/Mamba environment
+        return f'eval "$(conda shell.bash hook)" && conda activate "{env_path}"'
+    elif env_path.joinpath("bin", "activate").exists():
+        # Venv or Poetry environment
+        return f'source "{env_path}/bin/activate"'
+    else:
+        raise ValueError(f"Unable to detect the environment type for {env_path}")
 
 
 # def runner(config: IntoRunner):
@@ -343,6 +351,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         session_name: str = "nshrunner",
         attach: bool = True,
         print_command: bool = True,
+        pause_before_exit: bool = False,
     ):
         # Make sure the `session` utility is installed
         _ensure_supports_session()
@@ -362,7 +371,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         if activate_venv:
             setup_commands_pre.append("echo 'Activating environment'")
-            setup_commands_pre.append(_shell_hook())
+            setup_commands_pre.append(_shell_hook(Path(sys.prefix)))
 
         # Merge the setup commands
         setup_commands = setup_commands_pre + list(setup_commands or [])
@@ -380,7 +389,10 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             runs,
             environment=session.env,
             setup_commands=setup_commands,
-            execution={"mode": "sequential"},
+            execution={
+                "mode": "sequential",
+                "pause_before_exit": pause_before_exit,
+            },
         )
 
         # Get the screen session command
@@ -430,7 +442,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         if activate_venv:
             setup_commands_pre.append("echo 'Activating environment'")
-            setup_commands_pre.append(_shell_hook())
+            setup_commands_pre.append(_shell_hook(Path(sys.prefix)))
 
         # Merge the setup commands
         setup_commands = setup_commands_pre + list(setup_commands or [])
@@ -500,7 +512,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         if activate_venv:
             setup_commands_pre.append("echo 'Activating environment'")
-            setup_commands_pre.append(_shell_hook())
+            setup_commands_pre.append(_shell_hook(Path(sys.prefix)))
 
         # Merge the setup commands
         setup_commands = setup_commands_pre + list(setup_commands or [])

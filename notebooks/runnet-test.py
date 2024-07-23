@@ -15,4 +15,4 @@ runner = nshrunner.Runner(config, run_fn)
 list(runner.local(runs))
 
 # %%
-runner.session(runs, snapshot=False)
+runner.session(runs, snapshot=False, pause_before_exit=True)
