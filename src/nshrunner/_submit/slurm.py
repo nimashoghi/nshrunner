@@ -534,12 +534,11 @@ def to_array_batch_script(
     if not script_path.name.endswith(".sh"):
         raise ValueError("The script path must end with '.sh'.")
 
-    from ..picklerunner import serialize_many
+    from ..picklerunner.create import serialize_many
 
     kwargs = _update_kwargs(kwargs, dest)
 
     # Convert the command/callable to a string for the command
-    num_jobs = len(args_list)
 
     destdir = dest / "fns"
     destdir.mkdir(exist_ok=True)
@@ -564,6 +563,7 @@ def to_array_batch_script(
     )
     command = helper_script_to_command(helper_path, kwargs.get("command_template"))
 
+    num_jobs = len(args_list)
     _write_batch_script_to_file(
         script_path,
         kwargs,
