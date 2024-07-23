@@ -449,8 +449,6 @@ def _write_batch_script_to_file(
             )
         f.write(f"{command}\n")
 
-    return path
-
 
 def _update_kwargs(kwargs_in: SlurmJobKwargs, base_path: Path):
     # Update the kwargs with the default values
@@ -520,7 +518,7 @@ def _update_kwargs(kwargs_in: SlurmJobKwargs, base_path: Path):
 
 
 def to_array_batch_script(
-    dest: Path,
+    script_path: Path,
     callable: Callable[[Unpack[TArgs]], Any],
     args_list: Sequence[tuple[Unpack[TArgs]]],
     /,
@@ -532,6 +530,9 @@ def to_array_batch_script(
     """
     Create the batch script for the job.
     """
+
+    if not script_path.name.endswith(".sh"):
+        raise ValueError("The script path must end with '.sh'.")
 
     from ..picklerunner import serialize_many
 
@@ -549,19 +550,22 @@ def to_array_batch_script(
         [(args, {}) for args in args_list],
         start_idx=1,  # Slurm job indices are 1-based
     )
-    helper_path = write_helper_script(
-        destdir,
+
+    helper_path = script_path.with_suffix(".helper.sh")
+    write_helper_script(
+        helper_path,
         serialized_command.to_bash_command(
             job_index_variable, print_environment_info=print_environment_info
         ),
         kwargs.get("environment", {}),
         kwargs.get("setup_commands", []),
         command_prefix=python_command_prefix,
+        prepend_command_with_exec=True,
     )
     command = helper_script_to_command(helper_path, kwargs.get("command_template"))
 
-    script_path = _write_batch_script_to_file(
-        dest / "launch.sh",
+    _write_batch_script_to_file(
+        script_path,
         kwargs,
         command,
         job_array_n_jobs=num_jobs,

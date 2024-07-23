@@ -3,14 +3,13 @@ from pathlib import Path
 
 
 def write_helper_script(
-    base_dir: Path,
+    script_path: Path,
     command: str | Iterable[str],
     environment: Mapping[str, str],
     setup_commands: Sequence[str],
     chmod: bool = True,
     prepend_command_with_exec: bool = True,
     command_prefix: str | None = None,
-    file_name: str = "helper.sh",
 ):
     """
     Creates a helper bash script for running the given function.
@@ -26,8 +25,6 @@ def write_helper_script(
     - Easily run the function in a Singularity container
         using `singularity exec my_container.sif bash /path/to/helper.sh`.
     """
-
-    script_path = base_dir / file_name
 
     with script_path.open("w") as f:
         f.write("#!/bin/bash\n\n")
@@ -56,8 +53,6 @@ def write_helper_script(
     if chmod:
         # Make the script executable
         script_path.chmod(0o755)
-
-    return script_path
 
 
 DEFAULT_TEMPLATE = "bash {script}"
