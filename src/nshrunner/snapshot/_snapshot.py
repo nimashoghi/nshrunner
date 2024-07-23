@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
-from ._config import SnapshotConfig
+from ._config import SnapshotConfig, _resolve_parent_modules, resolve_dir
 
 log = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ def _ensure_supported():
         )
 
 
-def snapshot(config: SnapshotConfig):
+def snapshot_modules(config: SnapshotConfig):
     _ensure_supported()
 
     return _snapshot_modules(config.dir, config.modules).absolute()

@@ -46,7 +46,7 @@ from ._util.environment import (
 )
 from ._util.git import _gitignored_dir
 from .model.config import BaseConfig
-from .snapshot import _snapshot_modules
+from .snapshot import SnapshotArgType, SnapshotConfig, snapshot_modules
 from .trainer import Trainer
 
 log = logging.getLogger(__name__)
@@ -248,7 +248,12 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         return runs
 
-    def local(self, runs: Sequence[tuple[Unpack[TArguments]]]):
+    def local(
+        self,
+        runs: Sequence[tuple[Unpack[TArguments]]],
+        *,
+        snapshot: SnapshotArgType = False,
+    ):
         """
         Runs a list of configs locally.
 
@@ -258,12 +263,20 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             A sequence of runs to run.
         """
         runs = self._resolve_runs(runs)
+        base_dir = self._root_dir(runs)
+        if (
+            snapshot_config := SnapshotConfig._from_nshrunner_ctor(
+                snapshot, configs=runs, base_dir=base_dir
+            )
+        ) is not None:
+            snapshot_modules(snapshot_config)
+
         for args in _tqdm_if_installed(runs):
             yield self.run_fn(*args)
 
     def session(
         self,
-        runs: Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]],
+        runs: Sequence[tuple[Unpack[TArguments]]],
         *,
         snapshot: bool | SnapshotConfig,
         name: str = "ll",
@@ -306,6 +319,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         """
 
         _ensure_supports_session()
+        runs = self._resolve_runs(runs)
 
         # Generate a random ID for the session.
         # We'll use this ID for snapshotting, as well as for
