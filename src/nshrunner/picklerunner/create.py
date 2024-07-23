@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal, TypeAlias
 
 import cloudpickle as pickle
-from typing_extensions import TypedDict, TypeVarTuple, Unpack, override
+from typing_extensions import Required, TypedDict, TypeVarTuple, Unpack, override
 
 from ._types import SerializedFunctionCallDict
 
@@ -63,7 +63,7 @@ class SerializedMultiFunction(PathLike):
 
     def to_bash_command(
         self,
-        job_index_variable: str,
+        job_index_variable: str = "__NSHRUNNER_JOB_IDX__",
         python_executable: str | None = None,
         environment: Mapping[str, str] | None = None,
         print_environment_info: bool = False,
@@ -212,8 +212,8 @@ def _write_helper_script(
 TArguments = TypeVarTuple("TArguments")
 
 
-class SequentialExecutionConfig(TypedDict):
-    mode: Literal["sequential"]
+class SequentialExecutionConfig(TypedDict, total=False):
+    mode: Required[Literal["sequential"]]
 
     print_environment_info: bool
     """Print the environment information before starting the session."""
@@ -228,8 +228,8 @@ class SequentialExecutionConfig(TypedDict):
     """Wait for the user to press Enter after finishing."""
 
 
-class ArrayExecutionConfig(TypedDict):
-    mode: Literal["array"]
+class ArrayExecutionConfig(TypedDict, total=False):
+    mode: Required[Literal["array"]]
 
     job_index_variable: str
     """Name of the environment variable that contains the job index. E.g., `SLURM_ARRAY_TASK_ID` for Slurm."""

@@ -3,16 +3,15 @@ import logging
 import math
 import os
 import signal
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 from deepmerge import always_merger
 from typing_extensions import TypeAlias, TypedDict, TypeVarTuple, Unpack
 
 from ._output import SubmitOutput
-from ._script import helper_script_to_command, write_helper_script
 
 log = logging.getLogger(__name__)
 
@@ -516,52 +515,24 @@ def _update_kwargs(kwargs_in: SlurmJobKwargs, logs_dir: Path):
 
 
 def to_array_batch_script(
-    script_path: Path,
-    callable: Callable[[Unpack[TArgs]], Any],
-    args_list: Sequence[tuple[Unpack[TArgs]]],
+    command: str,
+    base_path: Path,
+    num_jobs: int,
     /,
-    job_index_variable: str = "SLURM_ARRAY_TASK_ID",
-    print_environment_info: bool = False,
-    python_command_prefix: str | None = None,
+    job_index_variable: str | None = "SLURM_ARRAY_TASK_ID",
     **kwargs: Unpack[SlurmJobKwargs],
 ) -> SubmitOutput:
     """
     Create the batch script for the job.
     """
 
-    if not script_path.name.endswith(".sh"):
-        raise ValueError("The script path must end with '.sh'.")
+    kwargs = _update_kwargs(kwargs, base_path / "logs")
 
-    from ..picklerunner.create import serialize_many
+    # Update the command to set __NSHRUNNER_JOB_IDX__ to the job index variable (if exists)
+    if job_index_variable:
+        command = command.replace("__NSHRUNNER_JOB_IDX__", job_index_variable)
 
-    kwargs = _update_kwargs(kwargs, script_path.parent / "logs")
-
-    # Convert the command/callable to a string for the command
-
-    destdir = dest / "fns"
-    destdir.mkdir(exist_ok=True)
-
-    serialized_command = serialize_many(
-        destdir,
-        callable,
-        [(args, {}) for args in args_list],
-        start_idx=1,  # Slurm job indices are 1-based
-    )
-
-    helper_path = script_path.with_suffix(".helper.sh")
-    write_helper_script(
-        helper_path,
-        serialized_command.to_bash_command(
-            job_index_variable, print_environment_info=print_environment_info
-        ),
-        kwargs.get("environment", {}),
-        kwargs.get("setup_commands", []),
-        command_prefix=python_command_prefix,
-        prepend_command_with_exec=True,
-    )
-    command = helper_script_to_command(helper_path, kwargs.get("command_template"))
-
-    num_jobs = len(args_list)
+    script_path = base_path / "launch.sh"
     _write_batch_script_to_file(
         script_path,
         kwargs,
