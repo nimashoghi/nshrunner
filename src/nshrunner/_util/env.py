@@ -1,5 +1,10 @@
+import contextlib
+import os
+from collections.abc import Mapping
+
+
 @contextlib.contextmanager
-def _with_env(self, env: Mapping[str, str]):
+def _with_env(env: Mapping[str, str]):
     env_old = {k: os.environ.get(k, None) for k in env}
     os.environ.update(env)
     try:

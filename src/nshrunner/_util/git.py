@@ -1,3 +1,6 @@
+from pathlib import Path
+
+
 def _run_git_pre_commit_hook(self):
     git_dir = self._find_git_dir()
     if not git_dir:
@@ -32,3 +35,17 @@ def _find_git_dir(self):
             return git_dir
         current_dir = current_dir.parent
     return None
+
+
+def _gitignored_dir(path: Path, *, create: bool = True) -> Path:
+    assert path.is_dir(), f"{path} is not a directory"
+
+    if create:
+        path.mkdir(exist_ok=True, parents=True)
+
+    gitignore_path = path / ".gitignore"
+    if not gitignore_path.exists():
+        gitignore_path.touch()
+        gitignore_path.write_text("*\n")
+
+    return path

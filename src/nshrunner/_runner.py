@@ -25,14 +25,16 @@ from typing_extensions import (
 )
 
 from ._logging import PythonLoggingConfig, init_python_logging
+from ._seed import SeedConfig, seed_everything
 from ._submit import unified
 from ._submit._script import write_helper_script
-from ._util import seed
+from ._util.env import _with_env
 from ._util.environment import (
     remove_lsf_environment_variables,
     remove_slurm_environment_variables,
     remove_wandb_environment_variables,
 )
+from ._util.git import _gitignored_dir
 from .model.config import BaseConfig
 from .snapshot import _snapshot_modules
 from .trainer import Trainer
@@ -133,12 +135,15 @@ TArguments = TypeVarTuple("TArguments")
 TReturn = TypeVar("TReturn", infer_variance=True)
 
 
-class RunInformation(TypedDict, total=False):
+class RunInfo(TypedDict, total=False):
     id: str
     """The ID of the run."""
 
     base_dir: _Path
     """The base directory to save the run's files to."""
+
+    env: Mapping[str, str]
+    """Environment variables to set for the run."""
 
     skip_python_logging: bool
     """Whether to skip setting up Python logging for the run. Default: `False`."""
@@ -155,35 +160,40 @@ class Config(C.Config):
     python_logging: PythonLoggingConfig = PythonLoggingConfig()
     """Logging configuration for the runner."""
 
+    seed: SeedConfig = SeedConfig(seed=0)
+    """Seed configuration for the runner."""
+
     env: Mapping[str, str] | None = None
     """Environment variables to set for the session."""
-
-    # validate_config_before_run: bool = True
-    # validate_strict: bool = True
 
 
 def _wrap_run_fn(
     config: Config,
     run_fn: Callable[[Unpack[TArguments]], TReturn],
-    info_fn: Callable[[Unpack[TArguments]], RunInformation],
+    info_fn: Callable[[Unpack[TArguments]], RunInfo],
     validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None],
 ):
     @functools.wraps(run_fn)
     def wrapped_run_fn(*args: Unpack[TArguments]) -> TReturn:
-        # Validate the configuration
-        if (validate_out := validate_fn(*args)) is not None and isinstance(
-            validate_out, tuple
-        ):
-            args = validate_out
+        with contextlib.ExitStack() as stack:
+            # Validate the configuration
+            if (validate_out := validate_fn(*args)) is not None and isinstance(
+                validate_out, tuple
+            ):
+                args = validate_out
 
-        # Get the run info
-        run_info = info_fn(*args)
+            # Get the run info
+            run_info = info_fn(*args)
 
-        # Set up Python logging
-        if not run_info.get("skip_python_logging", False):
-            init_python_logging(config.python_logging)
+            # Set up Python logging
+            if not run_info.get("skip_python_logging", False):
+                init_python_logging(config.python_logging)
 
-        return run_fn(*args)
+            # Set additional environment variables
+            env = {**(config.env or {}), **run_info.get("env", {})}
+            stack.enter_context(_with_env(env))
+
+            return run_fn(*args)
 
     return wrapped_run_fn
 
@@ -196,8 +206,9 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         self,
         config: Config,
         run_fn: Callable[[Unpack[TArguments]], TReturn],
-        info_fn: Callable[[Unpack[TArguments]], RunInformation] | None = None,
-        validate_fn: Callable[[Unpack[TArguments]], None] | None = None,
+        info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
+        validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]
+        | None = None,
     ):
         self.config = config
         del config
@@ -214,10 +225,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         self.run_fn = _wrap_run_fn(self.config, run_fn, self.info_fn, self.validate_fn)
         del run_fn
 
-    def _get_base_path(
-        self,
-        runs: list[tuple[TConfig, tuple[Unpack[TArguments]]]] | None,
-    ):
+    def _get_base_path(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         # If the user has provided a `savedir`, use that as the base path.
         if (savedir := self.config.savedir) is not None:
             base_path = Path(savedir)
@@ -225,12 +233,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             return base_path
 
         # If all configs have the same `project_root` config, use that instead.
-        project_root_paths = set(
-            str(project_root.absolute())
-            if (project_root := config.directory.project_root) is not None
-            else None
-            for config, _ in (runs or [])
-        )
+        project_root_paths = set(self.info_fn(*args).get("base_dir") for args in runs)
         if (
             project_root_paths
             and len(project_root_paths) == 1
@@ -240,53 +243,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         else:
             project_root_path = Path.cwd()
 
-        base_path = project_root_path / "llrunner"
-        base_path.mkdir(exist_ok=True, parents=True)
-
-        return base_path
-
-    @property
-    def _run_fn(self) -> RunProtocol[TConfig, TReturn, Unpack[TArguments]]:
-        run = self._run
-
-        @wraps(run)
-        def wrapped_run(config: TConfig, *args: Unpack[TArguments]) -> TReturn:
-            nonlocal self
-
-            with contextlib.ExitStack() as stack:
-                nonlocal run
-
-                # If `validate_config_before_run`, we validate the configuration before running the program.
-                if self.validate_config_before_run:
-                    config = config.model_deep_validate(strict=self.validate_strict)
-
-                # Set additional environment variables
-                if additional_env := config.runner.additional_env_vars:
-                    stack.enter_context(self._with_env(additional_env))
-
-                # Set up Python logging
-                self._setup_python_logging(config)
-
-                # Seed everything
-                seed.seed_everything(
-                    config.runner.seed.seed,
-                    workers=config.runner.seed.seed_workers,
-                )
-
-                # Auto-wrap the run in a Trainer context
-                if config.trainer.auto_wrap_trainer:
-                    stack.enter_context(Trainer.context(config))
-                    log.info("Auto-wrapping run in Trainer context")
-
-                # Dump run information
-                if config.runner.dump_run_information:
-                    self._dump_run_information(config)
-
-                return run(config, *args)
-
-            raise RuntimeError("ExitStack should never raise an exception")
-
-        return wrapped_run
+        return _gitignored_dir(project_root_path / "nshrunner", create=True)
 
     def local(
         self,
