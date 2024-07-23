@@ -14,6 +14,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Generic, Literal, Protocol, cast, runtime_checkable
 
+import nshconfig as C
 from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack, override
 
 from ._submit import unified
@@ -61,6 +62,10 @@ SNAPSHOT_CONFIG_DEFAULT = SnapshotConfig(
 )
 
 
+class RunnerConfig(C.Config):
+    pass
+
+
 TConfig = TypeVar("TConfig", bound=BaseConfig, infer_variance=True)
 TReturn = TypeVar("TReturn", default=None, infer_variance=True)
 TArguments = TypeVarTuple("TArguments", default=Unpack[tuple[()]])
@@ -72,8 +77,7 @@ def _validate_runs(runs: list[tuple[TConfig, tuple[Unpack[TArguments]]]]):
 
     # Make sure there are no duplicate ids
     id_counter = Counter(config.id for config, _ in runs if config.id is not None)
-    duplicate_ids = {id for id, count in id_counter.items() if count > 1}
-    if duplicate_ids:
+    if duplicate_ids := {id for id, count in id_counter.items() if count > 1}:
         raise ValueError(
             f"Duplicate run IDs found: {duplicate_ids}. Each run must have a unique ID."
         )
