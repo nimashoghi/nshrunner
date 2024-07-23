@@ -9,9 +9,9 @@ LogLevel: TypeAlias = Literal[
 ]
 
 
-class PythonLogging(C.Config):
-    log_level: LogLevel | None = None
-    """Log level to use for the Python logger (or None to use the default)."""
+class PythonLoggingConfig(C.Config):
+    log_level: LogLevel = "INFO"
+    """Log level to use for the Python logger."""
     log_save_dir: Path | None = None
     """Directory to save logs to. If None, logs will not be saved."""
 
@@ -28,7 +28,7 @@ class PythonLogging(C.Config):
     def pretty_(
         self,
         *,
-        log_level: LogLevel | None = "INFO",
+        log_level: LogLevel = "INFO",
         torch: bool = True,
         numpy: bool = True,
         rich: bool = True,
@@ -41,7 +41,7 @@ class PythonLogging(C.Config):
         self.rich_tracebacks = rich_tracebacks
 
 
-def init_python_logging(config: PythonLogging):
+def init_python_logging(config: PythonLoggingConfig):
     if config.lovely_tensors:
         try:
             import lovely_tensors

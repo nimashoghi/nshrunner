@@ -1,5 +1,6 @@
 import contextlib
 import copy
+import functools
 import logging
 import os
 import shutil
@@ -23,6 +24,7 @@ from typing_extensions import (
     override,
 )
 
+from ._logging import PythonLoggingConfig, init_python_logging
 from ._submit import unified
 from ._submit._script import write_helper_script
 from ._util import seed
@@ -31,7 +33,6 @@ from ._util.environment import (
     remove_slurm_environment_variables,
     remove_wandb_environment_variables,
 )
-from .log import init_python_logging
 from .model.config import BaseConfig
 from .snapshot import _snapshot_modules
 from .trainer import Trainer
@@ -130,7 +131,13 @@ class RunProtocol(Protocol[Unpack[TArguments], TReturn]):
 
 class RunInformation(TypedDict, total=False):
     id: str
+    """The ID of the run."""
+
     base_dir: _Path
+    """The base directory to save the run's files to."""
+
+    skip_python_logging: bool
+    """Whether to skip setting up Python logging for the run. Default: `False`."""
 
 
 class Config(C.Config):
@@ -140,11 +147,38 @@ class Config(C.Config):
         This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
         If `None`, this will default to the current working directory / `llrunner`.
     """
-    validate_config_before_run: bool = True
-    validate_strict: bool = True
+
+    python_logging: PythonLoggingConfig = PythonLoggingConfig()
+    """Logging configuration for the runner."""
 
     env: Mapping[str, str] | None = None
     """Environment variables to set for the session."""
+
+    # validate_config_before_run: bool = True
+    # validate_strict: bool = True
+
+
+def _wrap_run_fn(
+    config: Config,
+    run_fn: Callable[P, TReturn],
+    info_fn: Callable[P, RunInformation],
+    validate_fn: Callable[P, None],
+):
+    @functools.wraps(run_fn)
+    def wrapped_run_fn(*args: P.args, **kwargs: P.kwargs) -> TReturn:
+        # Validate the configuration
+        validate_fn(*args, **kwargs)
+
+        # Get the run info
+        run_info = info_fn(*args, **kwargs)
+
+        # Set up Python logging
+        if not run_info.get("skip_python_logging", False):
+            init_python_logging(config.python_logging)
+
+        return run_fn(*args, **kwargs)
+
+    return wrapped_run_fn
 
 
 class Runner(Generic[P, TReturn]):
@@ -156,12 +190,22 @@ class Runner(Generic[P, TReturn]):
         config: Config,
         run_fn: Callable[P, TReturn],
         info_fn: Callable[P, RunInformation] | None = None,
+        validate_fn: Callable[P, None] | None = None,
     ):
         self.config = config
-        self.run_fn = run_fn
+        del config
         if info_fn is None:
             info_fn = lambda *_args, **_kwargs: {}  # noqa: E731
         self.info_fn = info_fn
+        del info_fn
+
+        if validate_fn is None:
+            validate_fn = lambda *_args, **_kwargs: None  # noqa: E731
+        self.validate_fn = validate_fn
+        del validate_fn
+
+        self.run_fn = _wrap_run_fn(self.config, run_fn, self.info_fn, self.validate_fn)
+        del run_fn
 
     def _get_base_path(
         self,
@@ -193,25 +237,6 @@ class Runner(Generic[P, TReturn]):
         base_path.mkdir(exist_ok=True, parents=True)
 
         return base_path
-
-    def _setup_python_logging(self, root_config: BaseConfig):
-        """
-        Sets up the logger with the specified configurations.
-
-        Args:
-            root_config (BaseConfig): The root configuration object.
-        """
-        config = root_config.runner.python_logging
-
-        return init_python_logging(
-            lovely_tensors=config.lovely_tensors,
-            lovely_numpy=config.lovely_numpy,
-            rich=config.rich,
-            log_level=config.log_level,
-            log_save_dir=root_config.directory.resolve_subdirectory(
-                root_config.id, "stdio"
-            ),
-        )
 
     @property
     def _run_fn(self) -> RunProtocol[TConfig, TReturn, Unpack[TArguments]]:
