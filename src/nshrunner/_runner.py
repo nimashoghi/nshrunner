@@ -449,7 +449,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         setup_commands = setup_commands_pre + list(setup_commands or [])
 
         # Save all configs to pickle files
-        from ._picklerunner import serialize_many
+        from .picklerunner import serialize_many
 
         config_pickle_save_path = local_data_path / "sessions"
         config_pickle_save_path.mkdir(exist_ok=True)
