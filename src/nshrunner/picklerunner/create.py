@@ -5,7 +5,7 @@ from os import PathLike
 from pathlib import Path
 from typing import Any, Literal, TypeAlias
 
-import cloudpickle as pickle
+import cloudpickle
 from typing_extensions import Required, TypedDict, TypeVarTuple, Unpack, override
 
 from ._types import SerializedFunctionCallDict
@@ -50,7 +50,7 @@ def serialize_single(
 
     dest = Path(dest)
     with dest.open("wb") as file:
-        pickle.dump(serialized, file)
+        cloudpickle.dump(serialized, file)
 
     return _SerializedFunction(dest, additional_command_parts)
 

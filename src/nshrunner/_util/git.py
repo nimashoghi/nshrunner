@@ -38,10 +38,9 @@ def _find_git_dir(self):
 
 
 def _gitignored_dir(path: Path, *, create: bool = True) -> Path:
-    assert path.is_dir(), f"{path} is not a directory"
-
     if create:
         path.mkdir(exist_ok=True, parents=True)
+    assert path.is_dir(), f"{path} is not a directory"
 
     gitignore_path = path / ".gitignore"
     if not gitignore_path.exists():

@@ -135,12 +135,12 @@ def _wrap_run_fn(
 
 
 def _ensure_supports_session():
-    # Make sure we have session installed
+    # Make sure we have screen installed
     try:
-        subprocess.run(["session", "--version"], check=True)
+        subprocess.run(["screen", "--version"], check=True)
     except FileNotFoundError:
         raise FileNotFoundError(
-            "session is not installed. Please install session to use snapshot."
+            "screen is not installed. Please install screen to use snapshot."
         )
 
 
@@ -174,6 +174,10 @@ def _default_validate_fn(*args: Unpack[TArguments]) -> None:
 
 def _shell_hook():
     return f'eval "$(conda shell.bash hook)" && conda activate {sys.prefix}'
+
+
+# def runner(config: IntoRunner):
+#     pass
 
 
 @dataclass(frozen=True)
