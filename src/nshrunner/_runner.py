@@ -256,10 +256,29 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
     validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None] = (
         field(default_factory=lambda: _default_validate_fn)
     )
+    transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]] = (
+        field(default_factory=lambda: [])
+    )
+
+    @property
+    def _transform_fn(self, *args: Unpack[TArguments]) -> tuple[Unpack[TArguments]]:
+        for transform_fn in self.transform_fns:
+            args = transform_fn(*args)
+        return args
 
     @cached_property
     def _wrapped_run_fn(self):
-        return _wrap_run_fn(self.config, self.run_fn, self.info_fn, self.validate_fn)
+        return _wrap_run_fn(
+            self.config,
+            self.run_fn,
+            self.info_fn,
+            self.validate_fn,
+        )
+
+    def with_transform(
+        self,
+    ):
+        pass
 
     def _get_base_path(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         # If the user has provided a `savedir`, use that as the base path.
@@ -281,11 +300,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         return _gitignored_dir(project_root_path / "nshrunner", create=True)
 
-    def local(
-        self,
-        runs: Sequence[tuple[Unpack[TArguments]]],
-        env: Mapping[str, str] | None = None,
-    ):
+    def local(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         """
         Runs a list of configs locally.
 
@@ -296,13 +311,8 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         env : Mapping[str, str], optional
             Additional environment variables to set.
         """
-        return_values: list[TReturn] = []
-        for run in runs:
-            config, args = _resolve_run(run)
-            return_value = self.run_fn(*args)
-            return_values.append(return_value)
-
-        return return_values
+        for args in runs:
+            yield self.run_fn(*args)
 
     def fast_dev_run(
         self,
