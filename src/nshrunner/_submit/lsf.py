@@ -2,16 +2,15 @@ import copy
 import logging
 import os
 import signal
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 from deepmerge import always_merger
 from typing_extensions import TypeAlias, TypedDict, TypeVarTuple, Unpack
 
 from ._output import SubmitOutput
-from ._script import helper_script_to_command, write_helper_script
 
 log = logging.getLogger(__name__)
 
@@ -167,13 +166,6 @@ class LSFJobKwargs(TypedDict, total=False):
     A command to prefix the job command with.
 
     This is used to add commands like `jsrun` to the job command.
-    """
-
-    command_template: str
-    """
-    The template for the command to execute the helper script.
-
-    Default: `bash {/path/to/helper.sh}`.
     """
 
     signal: signal.Signals
@@ -412,51 +404,26 @@ def _update_kwargs(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
 
 
 def to_array_batch_script(
-    dest: Path,
-    callable: Callable[[Unpack[TArgs]], Any],
-    args_list: Sequence[tuple[Unpack[TArgs]]],
+    command: str,
+    base_path: Path,
+    num_jobs: int,
     /,
-    job_index_variable: str = "LSB_JOBINDEX",
-    print_environment_info: bool = False,
-    python_command_prefix: str | None = None,
+    job_index_variable: str | None = "LSB_JOBINDEX",
     **kwargs: Unpack[LSFJobKwargs],
 ) -> SubmitOutput:
     """
     Create the batch script for the job.
     """
 
-    from ..picklerunner import serialize_many
+    kwargs = _update_kwargs(kwargs, base_path / "logs")
 
-    kwargs = _update_kwargs(kwargs, dest)
+    # Update the command to set __NSHRUNNER_JOB_IDX__ to the job index variable (if exists)
+    if job_index_variable:
+        command = command.replace("__NSHRUNNER_JOB_IDX__", job_index_variable)
 
-    # Convert the command/callable to a string for the command
-    num_jobs = len(args_list)
-
-    destdir = dest / "fns"
-    destdir.mkdir(exist_ok=True)
-
-    additional_command_parts: list[str] = []
-
-    serialized_command = serialize_many(
-        destdir,
-        callable,
-        [(args, {}) for args in args_list],
-        start_idx=1,  # LSF job indices are 1-based
-        additional_command_parts=additional_command_parts,
-    )
-    helper_path = write_helper_script(
-        destdir,
-        serialized_command.to_bash_command(
-            job_index_variable, print_environment_info=print_environment_info
-        ),
-        kwargs.get("environment", {}),
-        kwargs.get("setup_commands", []),
-        command_prefix=python_command_prefix,
-    )
-    command = helper_script_to_command(helper_path, kwargs.get("command_template"))
-
-    script_path = _write_batch_script_to_file(
-        dest / "launch.sh",
+    script_path = base_path / "launch.sh"
+    _write_batch_script_to_file(
+        script_path,
         kwargs,
         command,
         job_array_n_jobs=num_jobs,

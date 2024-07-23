@@ -249,13 +249,6 @@ class SlurmJobKwargs(TypedDict, total=False):
     This is used to add commands like `srun` to the job command.
     """
 
-    command_template: str
-    """
-    The template for the command to execute the helper script.
-
-    Default: `bash {/path/to/helper.sh}`.
-    """
-
     srun_flags: str | Sequence[str]
     """
     The flags to pass to the `srun` command.

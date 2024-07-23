@@ -116,13 +116,6 @@ class GenericJobKwargs(TypedDict, total=False):
     signal: signal.Signals
     """The signal that will be sent to the job when it is time to stop it."""
 
-    command_template: str
-    """
-    The template for the command to execute the helper script.
-
-    Default: `bash {script}`.
-    """
-
     requeue_on_preempt: bool
     """
     Whether to requeue the job if it is preempted.
