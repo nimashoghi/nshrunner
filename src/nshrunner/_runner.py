@@ -60,7 +60,7 @@ class RunInfo(TypedDict, total=False):
     id: str
     """The ID of the run."""
 
-    base_dir: _Path
+    base_dir: _Path | None
     """The base directory to save the run's files to."""
 
     env: Mapping[str, str]
