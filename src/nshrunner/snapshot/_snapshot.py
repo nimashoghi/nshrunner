@@ -1,16 +1,15 @@
 import importlib.util
 import logging
 import subprocess
-import sys
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any
 
-from typing_extensions import assert_never
+from ._constant import SNAPSHOT_DIR_NAME_DEFAULT
 
 log = logging.getLogger(__name__)
 
@@ -93,9 +92,6 @@ def resolve_snapshot_dir(
     return snapshot_dir
 
 
-SNAPSHOT_DIR_NAME_DEFAULT = "ll_snapshot"
-
-
 def snapshot_modules(
     snapshot_dir: Path,
     modules: Sequence[str],
@@ -152,85 +148,58 @@ def snapshot_modules(
     return snapshot_dir
 
 
-def add_snapshot_to_python_path(
-    snapshot_dir: Path,
-    *,
-    on_error: Literal["warn", "raise"] = "raise",
+def snapshot(
+    self,
+    snapshot: bool | SnapshotConfig,
+    configs: Sequence[Any],
+    local_data_path: Path,
 ):
-    """
-    Add the snapshot directory to PYTHONPATH.
+    # Handle snapshot
+    snapshot_config: SnapshotConfig | None = None
+    if snapshot is True:
+        snapshot_config = {**SNAPSHOT_CONFIG_DEFAULT}
+    elif snapshot is False:
+        snapshot_config = None
+    elif isinstance(snapshot, Mapping):
+        snapshot_config = {**SNAPSHOT_CONFIG_DEFAULT, **snapshot}
 
-    Warns on:
-    - Modules within the snapshot directory that have already been imported
-        (and thus any previously imported module will not be updated).
-    """
+    del snapshot
+    if snapshot_config is None:
+        return None
 
-    snapshot_dir = snapshot_dir.resolve().absolute()
-    snapshot_dir_str = str(snapshot_dir)
-    # If the snapshot directory is already in the Python path, do nothing
-    if snapshot_dir_str in sys.path:
-        log.info(f"Snapshot directory {snapshot_dir} already in sys.path")
-        return
+    # Set the snapshot base to the user's home directory
+    snapshot_dir = snapshot_config.get("dir", local_data_path / "snapshot")
+    snapshot_dir.mkdir(exist_ok=True, parents=True)
 
-    # Iterate through all the modules within the snapshot directory
-    modules_list: list[str] = []
-    errors: list[str] = []
-    for module_dir in snapshot_dir.iterdir():
-        if not module_dir.is_dir():
-            continue
-
-        module_name = module_dir.name
-        # If the module has already been imported, warn the user
-        if module_name in sys.modules:
-            errors.append(
-                f"Module {module_name} has already been imported. "
-                "All previously imported modules will not be updated."
+    snapshot_modules_set: set[str] = set()
+    snapshot_modules_set.update(snapshot_config.get("modules", []))
+    if snapshot_config.get("snapshot_ll", True):
+        # Resolve ll by taking the module of the runner class
+        ll_module = self.__class__.__module__.split(".", 1)[0]
+        if ll_module != "ll":
+            log.warning(
+                f"Runner class {self.__class__.__name__} is not in the 'll' module.\n"
+                "This is unexpected and may lead to issues with snapshotting."
             )
-            continue
+        snapshot_modules_set.add(ll_module)
+    if snapshot_config.get("snapshot_config_cls_module", True):
+        for config in configs:
+            # Resolve the root module of the config class
+            # NOTE: We also must handle the case where the config
+            #   class's module is "__main__" (i.e. the config class
+            #   is defined in the main script).
+            module = config.__class__.__module__
+            if module == "__main__":
+                log.warning(
+                    f"Config class {config.__class__.__name__} is defined in the main script.\n"
+                    "Snapshotting the main script is not supported.\n"
+                    "Skipping snapshotting of the config class's module."
+                )
+                continue
 
-        modules_list.append(module_name)
+            # Make sure to get the root module
+            module = module.split(".", 1)[0]
+            snapshot_modules_set.add(module)
 
-    # If there are any errors, handle them according to the `on_error` parameter
-    if errors:
-        match on_error:
-            case "warn":
-                log.warning("\n".join(errors))
-            case "raise":
-                raise RuntimeError("\n".join(errors))
-            case _:
-                assert_never(on_error)
-
-    # Add the snapshot directory to the Python path
-    sys.path.insert(0, snapshot_dir_str)
-    log.critical(
-        f"Added {snapshot_dir} to sys.path. Modules: {', '.join(modules_list)}"
-    )
-
-    # Reset the import cache to ensure that the new modules are imported
-    importlib.invalidate_caches()
-
-
-def load_python_path_from_run(run_dir: Path):
-    import yaml
-
-    if (hparams_path := next((run_dir / "log").glob("**/hparams.yaml"), None)) is None:
-        raise FileNotFoundError(f"Could not find hparams.yaml in {run_dir}")
-
-    config = yaml.unsafe_load(hparams_path.read_text())
-
-    # Find the ll_snapshot if it exists
-    if (
-        snapshot_path := next(
-            (
-                path
-                for path in config.get("environment", {}).get("python_path", [])
-                if path.stem == SNAPSHOT_DIR_NAME_DEFAULT and path.is_dir()
-            ),
-            None,
-        )
-    ) is None:
-        return
-
-    # Add it to the current python path
-    snapshot_path = Path(snapshot_path).absolute()
-    add_snapshot_to_python_path(snapshot_path)
+    snapshot_path = snapshot_modules(snapshot_dir, list(snapshot_modules_set))
+    return snapshot_path.absolute()
