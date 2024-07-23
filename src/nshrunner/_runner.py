@@ -10,7 +10,7 @@ import traceback
 import uuid
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cached_property, wraps
 from pathlib import Path
 from typing import (
@@ -263,7 +263,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
     @property
     def _transform_fn(self, *args: Unpack[TArguments]) -> tuple[Unpack[TArguments]]:
         for transform_fn in self.transform_fns:
-            args = transform_fn(*args)
+            args = transform_fn(*copy.deepcopy(args))
         return args
 
     @cached_property
@@ -277,8 +277,9 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
     def with_transform(
         self,
+        transform_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]],
     ):
-        pass
+        return replace(self, transform_fns=[*self.transform_fns, transform_fn])
 
     def _get_base_path(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         # If the user has provided a `savedir`, use that as the base path.
@@ -307,9 +308,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         Parameters
         ----------
         runs : Sequence[tuple[Unpack[TArguments]]]
-            A sequence of runs to submit.
-        env : Mapping[str, str], optional
-            Additional environment variables to set.
+            A sequence of runs to run.
         """
         for args in runs:
             yield self.run_fn(*args)
