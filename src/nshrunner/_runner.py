@@ -232,6 +232,31 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         return _gitignored_dir(project_root_path / "nshrunner", create=True)
 
+    def _session_dir(
+        self,
+        runs: Sequence[tuple[Unpack[TArguments]]],
+        id: str,
+    ):
+        root_dir = self._root_dir(runs)
+        return _gitignored_dir(root_dir / id, create=True)
+
+    def _setup_session(
+        self,
+        runs: Sequence[tuple[Unpack[TArguments]]],
+        id: str | None = None,
+    ):
+        # Resolve all runs
+        runs = self._resolve_runs(runs)
+
+        # Create id if not provided
+        if id is None:
+            id = self.generate_id()
+
+        # Create the session directory
+        session_dir = self._session_dir(runs, id)
+
+        return runs, session_dir
+
     def _resolve_runs(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         # First, run all the transforms
         runs = [self._transform(*args) for args in runs]
@@ -248,12 +273,10 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         return runs
 
-    def local(
-        self,
-        runs: Sequence[tuple[Unpack[TArguments]]],
-        *,
-        snapshot: SnapshotArgType = False,
-    ):
+    def _resolve_env(self, env: Mapping[str, str] | None):
+        return {**(self.config.env or {}), **(env or {})}
+
+    def local(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         """
         Runs a list of configs locally.
 
@@ -263,16 +286,32 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             A sequence of runs to run.
         """
         runs = self._resolve_runs(runs)
+
+        for args in _tqdm_if_installed(runs):
+            yield self.run_fn(*args)
+
+    def session(
+        self,
+        runs: Sequence[tuple[Unpack[TArguments]]],
+        *,
+        snapshot: SnapshotArgType,
+        env: Mapping[str, str] | None = None,
+    ):
+        # Make sure the `session` utility is installed
+        _ensure_supports_session()
+
+        # Resolve all runs
+        runs = self._resolve_runs(runs)
+
         base_dir = self._root_dir(runs)
+
+        # Snapshot the environment
         if (
             snapshot_config := SnapshotConfig._from_nshrunner_ctor(
                 snapshot, configs=runs, base_dir=base_dir
             )
         ) is not None:
             snapshot_modules(snapshot_config)
-
-        for args in _tqdm_if_installed(runs):
-            yield self.run_fn(*args)
 
     def session(
         self,
