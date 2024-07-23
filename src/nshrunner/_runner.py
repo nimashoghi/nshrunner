@@ -3,41 +3,22 @@ import copy
 import functools
 import logging
 import os
-import shutil
 import subprocess
 import sys
-import traceback
 import uuid
-from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from functools import cached_property, wraps
+from functools import cached_property
 from pathlib import Path
-from typing import (
-    Any,
-    ClassVar,
-    Generic,
-    Literal,
-    Protocol,
-    TypeAlias,
-    cast,
-    runtime_checkable,
-)
+from typing import Generic, TypeAlias, cast
 
 import nshconfig as C
-from typing_extensions import (
-    ParamSpec,
-    TypedDict,
-    TypeVar,
-    TypeVarTuple,
-    Unpack,
-    override,
-)
+from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack
 
 from ._logging import PythonLoggingConfig, init_python_logging
-from ._seed import SeedConfig, seed_everything
-from ._submit import unified
-from ._submit._script import write_helper_script
+from ._seed import SeedConfig
+from ._submit import lsf, slurm
+from ._submit.slurm import SlurmJobKwargs
 from ._util.env import _with_env, _with_pythonpath_prepend
 from ._util.environment import (
     remove_lsf_environment_variables,
@@ -45,9 +26,7 @@ from ._util.environment import (
     remove_wandb_environment_variables,
 )
 from ._util.git import _gitignored_dir
-from .model.config import BaseConfig
 from .snapshot import SnapshotArgType, SnapshotConfig, SnapshotInfo, snapshot_modules
-from .trainer import Trainer
 
 log = logging.getLogger(__name__)
 
@@ -191,6 +170,10 @@ def _default_info_fn(*args: Unpack[TArguments]) -> RunInfo:
 
 def _default_validate_fn(*args: Unpack[TArguments]) -> None:
     pass
+
+
+def _shell_hook():
+    return f'eval "$(conda shell.bash hook)" && conda activate {sys.prefix}'
 
 
 @dataclass(frozen=True)
@@ -411,124 +394,6 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         return command
 
-    def session(
-        self,
-        runs: Sequence[tuple[Unpack[TArguments]]],
-        *,
-        snapshot: bool | SnapshotConfig,
-        name: str = "ll",
-        env: Mapping[str, str] | None = None,
-        setup_commands: Sequence[str] | None = None,
-        activate_venv: bool = True,
-        print_environment_info: bool = False,
-        pause_before_exit: bool = False,
-        attach: bool = True,
-        print_command: bool = True,
-        python_command_prefix: str | None = None,
-    ):
-        """
-        Launches len(sessions) local runs in different environments using `screen`.
-
-        Parameters
-        ----------
-        runs : Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]]
-            A sequence of runs to launch.
-        name : str, optional
-            The name of this job. This name is pre-pended to the `screen` session names.
-        env : Mapping[str, str], optional
-            Environment variables to set for the session.
-        snapshot : bool | SnapshotConfig
-            Whether to snapshot the environment before launching the sessions.
-        setup_commands : Sequence[str], optional
-            A list of commands to run at the beginning of the shell script.
-        activate_venv : bool, optional
-            Whether to activate the virtual environment before running the jobs.
-        print_environment_info : bool, optional
-            Whether to print the environment information before starting each job.
-        pause_before_exit : bool, optional
-            Whether to pause before exiting the screen session.
-        attach : bool, optional
-            Whether to attach to the screen session after launching it.
-        print_command : bool, optional
-            Whether to print the command to the console.
-        python_command_prefix : str, optional
-            A prefix to add to the Python command. This would be used, for example, to run the Python command with a profiler (e.g., nsight-sys).
-        """
-
-        _ensure_supports_session()
-        runs = self._resolve_runs(runs)
-
-        # Generate a random ID for the session.
-        # We'll use this ID for snapshotting, as well as for
-        #   defining the name of the shell script that will launch the sessions.
-        id = self.generate_id()
-
-        # Resolve all runs
-        resolved_runs = _resolve_runs(runs, validate=True)
-        local_data_path = self._local_data_path(id, resolved_runs)
-
-        # Setup commands and env
-        setup_commands_pre: list[str] = []
-        env = {**self.env, **(env or {})}
-
-        # Handle snapshot
-        snapshot_path = self._snapshot(snapshot, resolved_runs, local_data_path)
-        if snapshot_path:
-            snapshot_str = str(snapshot_path.resolve().absolute())
-            setup_commands_pre.append(f"export {self.SNAPSHOT_ENV_NAME}={snapshot_str}")
-            setup_commands_pre.append(f"export PYTHONPATH={snapshot_str}:$PYTHONPATH")
-
-        # Conda environment
-        if activate_venv:
-            # Activate the conda environment
-            setup_commands_pre.append("echo 'Activating environment'")
-            setup_commands_pre.append(_shell_hook())
-
-        setup_commands = setup_commands_pre + list(setup_commands or [])
-
-        # Save all configs to pickle files
-        from .picklerunner.create import serialize_many
-
-        config_pickle_save_path = local_data_path / "sessions"
-        config_pickle_save_path.mkdir(exist_ok=True)
-        serialized = serialize_many(
-            config_pickle_save_path,
-            _runner_main,
-            [
-                ((self._run, self._init_kwargs, c, args), {})
-                for c, args in resolved_runs
-            ],
-        )
-
-        # Create the launcher script
-        launcher_path = write_helper_script(
-            config_pickle_save_path,
-            serialized.bash_command_sequential(
-                pause_before_exit=pause_before_exit,
-                print_environment_info=print_environment_info,
-            ),
-            env,
-            setup_commands,
-            command_prefix=python_command_prefix,
-            file_name="launcher.sh",
-        )
-        launcher_command = ["bash", str(launcher_path)]
-
-        # Get the screen session command
-        command = _launch_session(
-            launcher_command,
-            config_pickle_save_path,
-            name,
-            attach=attach,
-        )
-        command = " ".join(command)
-
-        # Print the full command so the user can copy-paste it
-        if print_command:
-            print(f"Run the following command to launch the session:\n\n{command}")
-
-        return command
-
     def _local_data_path(
         self,
         id: str,
@@ -552,113 +417,65 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
     @remove_lsf_environment_variables()
     @remove_slurm_environment_variables()
     @remove_wandb_environment_variables()
-    def submit(
+    def submit_slurm(
         self,
-        runs: Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]],
+        runs: Sequence[tuple[Unpack[TArguments]]],
+        options: SlurmJobKwargs,
         *,
-        scheduler: unified.Scheduler | Literal["auto"] = "auto",
-        snapshot: bool | SnapshotConfig,
-        reset_id: bool = False,
-        activate_venv: bool = True,
-        print_environment_info: bool = False,
+        snapshot: SnapshotArgType,
+        setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
+        activate_venv: bool = True,
         print_command: bool = True,
-        python_command_prefix: str | None = None,
-        run_git_pre_commit_hook: bool = True,
-        **kwargs: Unpack[unified.GenericJobKwargs],
     ):
-        """
-        Submits a list of runs to a cluster (SLURM or LSF).
+        # Make sure the `session` utility is installed
+        _ensure_supports_session()
 
-        Parameters
-        ----------
-        runs : Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]]
-            A sequence of runs to submit.
-        scheduler : str, optional
-            The scheduler to use. If `auto`, the scheduler will be inferred.
-        snapshot : bool | Path
-            The base path to save snapshots to. If `True`, a default path will be used.
-        reset_id : bool, optional
-            Whether to reset the id of the runs before launching them.
-        activate_venv : bool, optional
-            Whether to activate the virtual environment before running the jobs.
-        print_environment_info : bool, optional
-            Whether to print the environment information before starting each job.
-        env : Mapping[str, str], optional
-            Additional environment variables to set.
-        print_command : bool, optional
-            Whether to print the command to the console.
-        python_command_prefix : str, optional
-            A prefix to add to the Python command. This would be used, for example, to run the Python command with a profiler (e.g., nsight-sys).
-        run_git_pre_commit_hook : bool, optional
-            Whether to run the Git pre-commit hook before launching the sessions.
-        kwargs : dict
-            Additional keyword arguments to pass to the job submission script.
-        """
-        if run_git_pre_commit_hook:
-            if not self._run_git_pre_commit_hook():
-                raise ValueError("Git pre-commit hook failed. Aborting job submission.")
+        # Resolve all runs
+        runs, session = self._setup_session(runs, env=env, snapshot=snapshot)
 
-        if scheduler == "auto":
-            scheduler = unified.infer_current_scheduler()
-            log.critical(f"Inferred current scheduler as {scheduler}")
-
-        id = self.generate_id()
-
-        resolved_runs = _resolve_runs(runs, reset_id=reset_id, validate=True)
-        local_data_path = self._local_data_path(id, resolved_runs)
-
-        # Environment variables
-        kwargs["environment"] = {
-            **self.env,
-            **kwargs.get("environment", {}),
-            **(env or {}),
-        }
-
-        # Validate the submit options before proceeding
-        unified.validate_kwargs(scheduler, kwargs)
-
-        # Setup commands
+        # Use setup commands to directly put env/pythonpath into the session bash script
         setup_commands_pre: list[str] = []
+        if session.env:
+            for key, value in session.env.items():
+                setup_commands_pre.append(f"export {key}={value}")
+        if session.snapshot is not None:
+            setup_commands_pre.append(
+                f"export PYTHONPATH={session.snapshot.snapshot_dir}:$PYTHONPATH"
+            )
 
-        # Handle snapshot
-        snapshot_path = self._snapshot(snapshot, resolved_runs, local_data_path)
-        if snapshot_path:
-            snapshot_str = str(snapshot_path.resolve().absolute())
-            setup_commands_pre.append(f"export {self.SNAPSHOT_ENV_NAME}={snapshot_str}")
-            setup_commands_pre.append(f"export PYTHONPATH={snapshot_str}:$PYTHONPATH")
-
-        # Conda environment
         if activate_venv:
-            # Activate the conda environment
             setup_commands_pre.append("echo 'Activating environment'")
             setup_commands_pre.append(_shell_hook())
 
-        kwargs["setup_commands"] = setup_commands_pre + list(
-            kwargs.get("setup_commands", [])
+        # Merge the setup commands
+        setup_commands = setup_commands_pre + list(setup_commands or [])
+        del setup_commands_pre
+
+        # Convert runs to commands using picklerunner
+        from .picklerunner.create import callable_to_command
+
+        command_base_dir = session.dir_path / "submit"
+        command_base_dir.mkdir(parents=True, exist_ok=True)
+        script_path = command_base_dir / "launcher.sh"
+        command = callable_to_command(
+            script_path,
+            self._wrapped_run_fn,
+            runs,
+            environment=session.env,
+            setup_commands=setup_commands,
+            execution={"mode": "array"},
         )
 
-        base_path = local_data_path / "submit"
-        base_path.mkdir(exist_ok=True, parents=True)
-
-        # Serialize the runs
-        map_array_args: list[
-            tuple[
-                RunProtocol[TConfig, TReturn, Unpack[TArguments]],
-                Mapping[str, Any],
-                TConfig,
-                tuple[Unpack[TArguments]],
-            ]
-        ] = [(self._run, self._init_kwargs, c, args) for c, args in resolved_runs]
-        submission = unified.to_array_batch_script(
-            scheduler,
-            base_path,
-            _runner_main,
-            map_array_args,
-            print_environment_info=print_environment_info,
-            python_command_prefix=python_command_prefix,
-            **kwargs,
+        # Create the submission script
+        submission = slurm.to_array_batch_script(
+            command,
+            base_path=command_base_dir,
+            num_jobs=len(runs),
+            config=options,
         )
+
+        # Print the full command so the user can copy-paste it
         if print_command:
             print(
                 f"Please run the following command to submit the jobs:\n\n{submission.command}"
@@ -666,134 +483,71 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         return submission
 
-    def submit_slurm(
-        self,
-        runs: Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]],
-        *,
-        snapshot: bool | SnapshotConfig,
-        reset_id: bool = False,
-        activate_venv: bool = True,
-        print_environment_info: bool = False,
-        env: Mapping[str, str] | None = None,
-        print_command: bool = True,
-        python_command_prefix: str | None = None,
-        run_git_pre_commit_hook: bool = True,
-        **kwargs: Unpack[unified.GenericJobKwargs],
-    ):
-        """
-        Submits a list of runs to a SLURM cluster.
-
-        Parameters
-        ----------
-        runs : Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]]
-            A sequence of runs to submit.
-        scheduler : str, optional
-            The scheduler to use. If `auto`, the scheduler will be inferred.
-        snapshot : bool | Path
-            The base path to save snapshots to. If `True`, a default path will be used.
-        reset_id : bool, optional
-            Whether to reset the id of the runs before launching them.
-        activate_venv : bool, optional
-            Whether to activate the virtual environment before running the jobs.
-        print_environment_info : bool, optional
-            Whether to print the environment information before starting each job.
-        env : Mapping[str, str], optional
-            Additional environment variables to set.
-        print_command : bool, optional
-            Whether to print the command to the console.
-        python_command_prefix : str, optional
-            A prefix to add to the Python command. This would be used, for example, to run the Python command with a profiler (e.g., nsight-sys).
-        run_git_pre_commit_hook : bool, optional
-            Whether to run the Git pre-commit hook before launching the sessions.
-        kwargs : dict
-            Additional keyword arguments to pass to the job submission script.
-        """
-        return self.submit(
-            runs,
-            scheduler="slurm",
-            snapshot=snapshot,
-            reset_id=reset_id,
-            activate_venv=activate_venv,
-            print_environment_info=print_environment_info,
-            env=env,
-            print_command=print_command,
-            python_command_prefix=python_command_prefix,
-            run_git_pre_commit_hook=run_git_pre_commit_hook,
-            **kwargs,
-        )
-
+    @remove_lsf_environment_variables()
+    @remove_slurm_environment_variables()
+    @remove_wandb_environment_variables()
     def submit_lsf(
         self,
-        runs: Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]],
+        runs: Sequence[tuple[Unpack[TArguments]]],
+        options: lsf.LSFJobKwargs,
         *,
-        snapshot: bool | SnapshotConfig,
-        reset_id: bool = False,
-        activate_venv: bool = True,
-        print_environment_info: bool = False,
+        snapshot: SnapshotArgType,
+        setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
+        activate_venv: bool = True,
         print_command: bool = True,
-        python_command_prefix: str | None = None,
-        run_git_pre_commit_hook: bool = True,
-        **kwargs: Unpack[unified.GenericJobKwargs],
     ):
-        """
-        Submits a list of runs to an LSF cluster.
+        # Make sure the `session` utility is installed
+        _ensure_supports_session()
 
-        Parameters
-        ----------
-        runs : Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]]
-            A sequence of runs to submit.
-        scheduler : str, optional
-            The scheduler to use. If `auto`, the scheduler will be inferred.
-        snapshot : bool | Path
-            The base path to save snapshots to. If `True`, a default path will be used.
-        reset_id : bool, optional
-            Whether to reset the id of the runs before launching them.
-        activate_venv : bool, optional
-            Whether to activate the virtual environment before running the jobs.
-        print_environment_info : bool, optional
-            Whether to print the environment information before starting each job.
-        env : Mapping[str, str], optional
-            Additional environment variables to set.
-        print_command : bool, optional
-            Whether to print the command to the console.
-        python_command_prefix : str, optional
-            A prefix to add to the Python command. This would be used, for example, to run the Python command with a profiler (e.g., nsight-sys).
-        run_git_pre_commit_hook : bool, optional
-            Whether to run the Git pre-commit hook before launching the sessions.
-        kwargs : dict
-            Additional keyword arguments to pass to the job submission script.
-        """
-        return self.submit(
+        # Resolve all runs
+        runs, session = self._setup_session(runs, env=env, snapshot=snapshot)
+
+        # Use setup commands to directly put env/pythonpath into the session bash script
+        setup_commands_pre: list[str] = []
+        if session.env:
+            for key, value in session.env.items():
+                setup_commands_pre.append(f"export {key}={value}")
+        if session.snapshot is not None:
+            setup_commands_pre.append(
+                f"export PYTHONPATH={session.snapshot.snapshot_dir}:$PYTHONPATH"
+            )
+
+        if activate_venv:
+            setup_commands_pre.append("echo 'Activating environment'")
+            setup_commands_pre.append(_shell_hook())
+
+        # Merge the setup commands
+        setup_commands = setup_commands_pre + list(setup_commands or [])
+        del setup_commands_pre
+
+        # Convert runs to commands using picklerunner
+        from .picklerunner.create import callable_to_command
+
+        command_base_dir = session.dir_path / "submit"
+        command_base_dir.mkdir(parents=True, exist_ok=True)
+        script_path = command_base_dir / "launcher.sh"
+        command = callable_to_command(
+            script_path,
+            self._wrapped_run_fn,
             runs,
-            scheduler="lsf",
-            snapshot=snapshot,
-            reset_id=reset_id,
-            activate_venv=activate_venv,
-            print_environment_info=print_environment_info,
-            env=env,
-            print_command=print_command,
-            python_command_prefix=python_command_prefix,
-            run_git_pre_commit_hook=run_git_pre_commit_hook,
-            **kwargs,
+            environment=session.env,
+            setup_commands=setup_commands,
+            execution={"mode": "array"},
         )
 
+        # Create the submission script
+        submission = lsf.to_array_batch_script(
+            command,
+            base_path=command_base_dir,
+            num_jobs=len(runs),
+            config=options,
+        )
 
-# First, let's create the function that's going to be run on the cluster.
-def _runner_main(
-    run_fn: RunProtocol[TConfig, TReturn, Unpack[TArguments]],
-    runner_kwargs: Mapping[str, Any],
-    config: TConfig,
-    args: tuple[Unpack[TArguments]],
-):
-    # Create the runner
-    runner = Runner(run_fn, **runner_kwargs)
+        # Print the full command so the user can copy-paste it
+        if print_command:
+            print(
+                f"Please run the following command to submit the jobs:\n\n{submission.command}"
+            )
 
-    # Run the function and return the result
-    return_values = runner.local([(config, *args)])
-    assert len(return_values) == 1
-    return return_values[0]
-
-
-def _shell_hook():
-    return f'eval "$(conda shell.bash hook)" && conda activate {sys.prefix}'
+        return submission

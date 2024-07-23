@@ -404,18 +404,20 @@ def _update_kwargs(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
 
 
 def to_array_batch_script(
-    command: str,
+    command: str | Sequence[str],
+    *,
     base_path: Path,
     num_jobs: int,
-    /,
     job_index_variable: str | None = "LSB_JOBINDEX",
-    **kwargs: Unpack[LSFJobKwargs],
+    config: LSFJobKwargs,
 ) -> SubmitOutput:
     """
     Create the batch script for the job.
     """
+    if not isinstance(command, str):
+        command = " ".join(command)
 
-    kwargs = _update_kwargs(kwargs, base_path / "logs")
+    config = _update_kwargs(config, base_path / "logs")
 
     # Update the command to set __NSHRUNNER_JOB_IDX__ to the job index variable (if exists)
     if job_index_variable:
@@ -424,7 +426,7 @@ def to_array_batch_script(
     script_path = base_path / "launch.sh"
     _write_batch_script_to_file(
         script_path,
-        kwargs,
+        config,
         command,
         job_array_n_jobs=num_jobs,
     )
