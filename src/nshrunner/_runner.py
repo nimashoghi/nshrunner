@@ -38,7 +38,7 @@ from ._logging import PythonLoggingConfig, init_python_logging
 from ._seed import SeedConfig, seed_everything
 from ._submit import unified
 from ._submit._script import write_helper_script
-from ._util.env import _with_env
+from ._util.env import _with_env, _with_pythonpath_prepend
 from ._util.environment import (
     remove_lsf_environment_variables,
     remove_slurm_environment_variables,
@@ -46,10 +46,25 @@ from ._util.environment import (
 )
 from ._util.git import _gitignored_dir
 from .model.config import BaseConfig
-from .snapshot import SnapshotArgType, SnapshotConfig, snapshot_modules
+from .snapshot import SnapshotArgType, SnapshotConfig, SnapshotInfo, snapshot_modules
 from .trainer import Trainer
 
 log = logging.getLogger(__name__)
+
+
+@dataclass()
+class Session:
+    id: str
+    """The ID of the session."""
+
+    dir_path: Path
+    """The path to the session directory."""
+
+    env: dict[str, str] = field(default_factory=lambda: {})
+    """Environment variables to set for the session."""
+
+    snapshot: SnapshotInfo | None = None
+    """The snapshot information for the session."""
 
 
 T = TypeVar("T", infer_variance=True)
@@ -278,8 +293,11 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         # Create the session directory
         session_dir = self._session_dir(runs, id)
 
+        # Create the session object (to return)
+        session = Session(id=id, dir_path=session_dir)
+
         # Resolve the environment
-        env = self._resolve_env(env)
+        session.env = self._resolve_env(env)
 
         # Take a snapshot of the environment if needed
         if (
@@ -287,17 +305,22 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
                 snapshot, configs=runs, base_dir=session_dir
             )
         ) is not None:
-            snapshot_path = snapshot_modules(snapshot_config)
+            session.snapshot = snapshot_modules(snapshot_config)
+            snapshot_path_str = str(session.snapshot.snapshot_dir.absolute())
             # Update the environment to include the snapshot path
-            env = {
-                **env,
-                self.config.snapshot_env_name: str(snapshot_path),
-                "PYTHONPATH": f"{snapshot_path}:{os.environ.get('PYTHONPATH', '')}",
+            session.env = {
+                **session.env,
+                self.config.snapshot_env_name: snapshot_path_str,
             }
 
-        return runs, session_dir
+        return runs, session
 
-    def local(self, runs: Sequence[tuple[Unpack[TArguments]]]):
+    def local(
+        self,
+        runs: Sequence[tuple[Unpack[TArguments]]],
+        *,
+        env: Mapping[str, str] | None = None,
+    ):
         """
         Runs a list of configs locally.
 
@@ -306,32 +329,87 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         runs : Sequence[tuple[Unpack[TArguments]]]
             A sequence of runs to run.
         """
-        runs, _ = self._setup_session(runs)
-        for args in _tqdm_if_installed(runs):
-            yield self.run_fn(*args)
+        runs, session = self._setup_session(runs, env=env, snapshot=False)
+
+        with contextlib.ExitStack() as stack:
+            if session.env:
+                stack.enter_context(_with_env(session.env))
+
+            if session.snapshot is not None:
+                stack.enter_context(
+                    _with_pythonpath_prepend(
+                        (session.snapshot.snapshot_dir, session.snapshot.modules)
+                    )
+                )
+
+            for args in _tqdm_if_installed(runs):
+                yield self.run_fn(*args)
 
     def session(
         self,
         runs: Sequence[tuple[Unpack[TArguments]]],
         *,
         snapshot: SnapshotArgType,
+        setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
+        activate_venv: bool = True,
+        session_name: str = "nshrunner",
+        attach: bool = True,
+        print_command: bool = True,
     ):
         # Make sure the `session` utility is installed
         _ensure_supports_session()
 
         # Resolve all runs
-        runs = self._resolve_runs(runs)
+        runs, session = self._setup_session(runs, env=env, snapshot=snapshot)
 
-        base_dir = self._root_dir(runs)
-
-        # Snapshot the environment
-        if (
-            snapshot_config := SnapshotConfig._from_nshrunner_ctor(
-                snapshot, configs=runs, base_dir=base_dir
+        # Use setup commands to directly put env/pythonpath into the session bash script
+        setup_commands_pre: list[str] = []
+        if session.env:
+            for key, value in session.env.items():
+                setup_commands_pre.append(f"export {key}={value}")
+        if session.snapshot is not None:
+            setup_commands_pre.append(
+                f"export PYTHONPATH={session.snapshot.snapshot_dir}:$PYTHONPATH"
             )
-        ) is not None:
-            snapshot_modules(snapshot_config)
+
+        if activate_venv:
+            setup_commands_pre.append("echo 'Activating environment'")
+            setup_commands_pre.append(_shell_hook())
+
+        # Merge the setup commands
+        setup_commands = setup_commands_pre + list(setup_commands or [])
+        del setup_commands_pre
+
+        # Convert runs to commands using picklerunner
+        from .picklerunner.create import callable_to_command
+
+        command_base_dir = session.dir_path / "session"
+        command_base_dir.mkdir(parents=True, exist_ok=True)
+        script_path = command_base_dir / "launch.sh"
+        command = callable_to_command(
+            script_path,
+            self._wrapped_run_fn,
+            runs,
+            environment=session.env,
+            setup_commands=setup_commands,
+            execution={"mode": "sequential"},
+        )
+
+        # Get the screen session command
+        command = _launch_session(
+            command,
+            command_base_dir,
+            session_name,
+            attach=attach,
+        )
+        command = " ".join(command)
+
+        # Print the full command so the user can copy-paste it
+        if print_command:
+            print(f"Run the following command to launch the session:\n\n{command}")
+
+        return command
 
     def session(
         self,

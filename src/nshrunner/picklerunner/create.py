@@ -218,9 +218,6 @@ class SequentialExecutionConfig(TypedDict, total=False):
     print_environment_info: bool
     """Print the environment information before starting the session."""
 
-    environment: Mapping[str, str]
-    """Set the environment variables."""
-
     python_executable: str | None
     """Python executable to use for running the script."""
 
@@ -237,9 +234,6 @@ class ArrayExecutionConfig(TypedDict, total=False):
     print_environment_info: bool
     """Print the environment information before starting the session."""
 
-    environment: Mapping[str, str]
-    """Set the environment variables."""
-
     python_executable: str | None
     """Python executable to use for running the script."""
 
@@ -251,8 +245,11 @@ def callable_to_command(
     script_path: Path,
     callable: Callable[[Unpack[TArguments]], Any],
     args_list: Sequence[tuple[Unpack[TArguments]]],
+    *,
+    environment: Mapping[str, str],
+    setup_commands: Sequence[str],
     execution: SequentialExecutionConfig | ArrayExecutionConfig,
-    command_template: str = "bash {script}",
+    command_template: list[str] = ["bash", "{script}"],
 ):
     # Validate args:
     # - script_path must end with '.sh'
@@ -260,7 +257,7 @@ def callable_to_command(
         raise ValueError("The script path must end with '.sh'.")
 
     # - `command_template` must contain '{script}'
-    if "{script}" not in command_template:
+    if not any("{script}" in part for part in command_template):
         raise ValueError("The command template must contain '{script}'.")
 
     from ..picklerunner.create import serialize_many
@@ -278,8 +275,10 @@ def callable_to_command(
     match execution:
         case {"mode": "sequential", **kwargs}:
             command_inner = serialized_command.bash_command_sequential(**kwargs)
+            del kwargs
         case {"mode": "array", **kwargs}:
             command_inner = serialized_command.to_bash_command(**kwargs)
+            del kwargs
         case _:
             raise ValueError(f"Invalid execution mode: {execution['mode']}")
 
@@ -287,10 +286,10 @@ def callable_to_command(
     _write_helper_script(
         helper_path,
         command_inner,
-        kwargs.get("environment", {}),
-        kwargs.get("setup_commands", []),
+        environment,
+        setup_commands,
         prepend_command_with_exec=True,
     )
-    command = command_template.format(script=str(helper_path.absolute()))
-
+    script_path_str = str(helper_path.absolute())
+    command = [part.format(script=script_path_str) for part in command_template]
     return command

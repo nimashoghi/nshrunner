@@ -3,11 +3,11 @@ import logging
 import subprocess
 import uuid
 from collections import defaultdict
-from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from ._config import SnapshotConfig, _resolve_parent_modules, resolve_dir
+from ._config import SnapshotConfig
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +84,16 @@ def resolve_snapshot_dir(
     return snapshot_dir
 
 
-def _snapshot_modules(snapshot_dir: Path, modules: Sequence[str]):
+@dataclass
+class SnapshotInfo:
+    snapshot_dir: Path
+    """The directory where the snapshot is saved."""
+
+    modules: list[str]
+    """The modules that were snapshot."""
+
+
+def _snapshot_modules(snapshot_dir: Path, modules: list[str]):
     """
     Snapshot the specified modules to the given directory.
 
@@ -130,7 +139,7 @@ def _snapshot_modules(snapshot_dir: Path, modules: Sequence[str]):
         log.info(f"Moved {location} to {destination} for {module=}")
         moved_modules[module].append((location, destination))
 
-    return snapshot_dir
+    return SnapshotInfo(snapshot_dir.absolute(), modules)
 
 
 def _ensure_supported():
@@ -153,4 +162,4 @@ def _ensure_supported():
 def snapshot_modules(config: SnapshotConfig):
     _ensure_supported()
 
-    return _snapshot_modules(config.dir, config.modules).absolute()
+    return _snapshot_modules(config.dir, config.modules)
