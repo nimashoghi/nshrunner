@@ -394,26 +394,6 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         return command
 
-    def _local_data_path(
-        self,
-        id: str,
-        runs: list[tuple[TConfig, tuple[Unpack[TArguments]]]] | None = None,
-    ) -> Path:
-        # First, resolve the base path.
-        base_path = self._get_base_path(runs)
-        base_path.mkdir(parents=True, exist_ok=True)
-
-        # Add a gitignore file to the directory so that the entire directory is ignored by git
-        gitignore_path = base_path / ".gitignore"
-        if not gitignore_path.exists():
-            gitignore_path.touch()
-            gitignore_path.write_text("*\n")
-
-        local_data_path = base_path / id
-        local_data_path.mkdir(exist_ok=True)
-
-        return local_data_path
-
     @remove_lsf_environment_variables()
     @remove_slurm_environment_variables()
     @remove_wandb_environment_variables()
