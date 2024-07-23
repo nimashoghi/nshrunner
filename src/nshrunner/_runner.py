@@ -578,7 +578,7 @@ def runner(
         _default_validate_fn
     ),
     transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]] = [],
-    **config: RunnerConfigDict,
+    **config: Unpack[RunnerConfigDict],
 ):
     return Runner(
         config=Config(**cast(Any, config)),

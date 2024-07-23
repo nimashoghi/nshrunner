@@ -1,5 +1,5 @@
 # %%
-import nshrunner
+import nshrunner as R
 
 
 def run_fn(x: int):
@@ -8,8 +8,9 @@ def run_fn(x: int):
 
 runs = [(1,)]
 
-config = nshrunner.Config()
-runner = nshrunner.Runner(config, run_fn)
+runner = R.runner(
+    run_fn,
+)
 
 # %%
 list(runner.local(runs))

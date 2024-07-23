@@ -106,17 +106,12 @@ def _set_env(key: str, value: str):
 def _to_result_path(script_path: Path):
     results_dir = script_path.parent / "results"
     results_dir.mkdir(exist_ok=True)
-    filename = script_path.stem
-    # Add a random uuid to the filename to avoid the case where different
-    # ranks write to the same file.
-    # Final sanity check: If the filename exists, try another one.
-    while True:
-        updated_filename = f"{filename}-{uuid.uuid4()}"
-        if not (results_dir / f"{updated_filename}.pkl").exists():
-            filename = updated_filename
-            break
 
-    return results_dir / f"{filename}.pkl"
+    i = 0
+    while (fpath := results_dir / f"{script_path.stem}.rank{i}.pkl").exists():
+        i += 1
+
+    return fpath
 
 
 def main():
@@ -164,7 +159,7 @@ def main():
             log.critical(f"Executing #{i}: {path=}...")
             result = _execute_single(path)
             result_path = _to_result_path(path)
-            log.critical(f"Saving result to {result_path}...")
+            log.critical(f"Saving {result=} to {result_path}...")
             with result_path.open("wb") as file:
                 cloudpickle.dump(result, file)
 
