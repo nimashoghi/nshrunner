@@ -10,9 +10,19 @@ import traceback
 import uuid
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
-from functools import wraps
+from dataclasses import dataclass, field
+from functools import cached_property, wraps
 from pathlib import Path
-from typing import Any, Generic, Literal, Protocol, TypeAlias, cast, runtime_checkable
+from typing import (
+    Any,
+    ClassVar,
+    Generic,
+    Literal,
+    Protocol,
+    TypeAlias,
+    cast,
+    runtime_checkable,
+)
 
 import nshconfig as C
 from typing_extensions import (
@@ -223,35 +233,33 @@ def _launch_session(
     ]
 
 
+def _default_info_fn(*args: Unpack[TArguments]) -> RunInfo:
+    return {}
+
+
+def _default_validate_fn(*args: Unpack[TArguments]) -> None:
+    pass
+
+
+@dataclass(frozen=True)
 class Runner(Generic[Unpack[TArguments], TReturn]):
-    DEFAULT_ENV: dict[str, str] = {}
-    SNAPSHOT_ENV_NAME = "LL_SNAPSHOT"
+    SNAPSHOT_ENV_NAME: ClassVar[str] = "LL_SNAPSHOT"
 
     def generate_id(self):
         return str(uuid.uuid4())
 
-    def __init__(
-        self,
-        config: Config,
-        run_fn: Callable[[Unpack[TArguments]], TReturn],
-        info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
-        validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]
-        | None = None,
-    ):
-        self.config = config
-        del config
-        if info_fn is None:
-            info_fn = lambda *_: {}  # noqa: E731
-        self.info_fn = info_fn
-        del info_fn
+    config: Config
+    run_fn: Callable[[Unpack[TArguments]], TReturn]
+    info_fn: Callable[[Unpack[TArguments]], RunInfo] = field(
+        default_factory=lambda: _default_info_fn
+    )
+    validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None] = (
+        field(default_factory=lambda: _default_validate_fn)
+    )
 
-        if validate_fn is None:
-            validate_fn = lambda *_: None  # noqa: E731
-        self.validate_fn = validate_fn
-        del validate_fn
-
-        self.run_fn = _wrap_run_fn(self.config, run_fn, self.info_fn, self.validate_fn)
-        del run_fn
+    @cached_property
+    def _wrapped_run_fn(self):
+        return _wrap_run_fn(self.config, self.run_fn, self.info_fn, self.validate_fn)
 
     def _get_base_path(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         # If the user has provided a `savedir`, use that as the base path.
