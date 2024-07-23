@@ -96,6 +96,9 @@ class Config(C.Config):
     validate_no_duplicate_ids: bool = True
     """Whether to validate that there are no duplicate IDs in the runs."""
 
+    snapshot_env_name: str = "NSHRUNNER_SNAPSHOT_PATH"
+    """The name of the environment variable to set the snapshot path to."""
+
 
 def _tqdm_if_installed(iterable: Iterable[T], *args, **kwargs) -> Iterable[T]:
     try:
@@ -177,8 +180,6 @@ def _default_validate_fn(*args: Unpack[TArguments]) -> None:
 
 @dataclass(frozen=True)
 class Runner(Generic[Unpack[TArguments], TReturn]):
-    SNAPSHOT_ENV_NAME: ClassVar[str] = "LL_SNAPSHOT"
-
     def generate_id(self):
         return str(uuid.uuid4())
 
@@ -240,23 +241,6 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         root_dir = self._root_dir(runs)
         return _gitignored_dir(root_dir / id, create=True)
 
-    def _setup_session(
-        self,
-        runs: Sequence[tuple[Unpack[TArguments]]],
-        id: str | None = None,
-    ):
-        # Resolve all runs
-        runs = self._resolve_runs(runs)
-
-        # Create id if not provided
-        if id is None:
-            id = self.generate_id()
-
-        # Create the session directory
-        session_dir = self._session_dir(runs, id)
-
-        return runs, session_dir
-
     def _resolve_runs(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         # First, run all the transforms
         runs = [self._transform(*args) for args in runs]
@@ -276,6 +260,43 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
     def _resolve_env(self, env: Mapping[str, str] | None):
         return {**(self.config.env or {}), **(env or {})}
 
+    def _setup_session(
+        self,
+        runs: Sequence[tuple[Unpack[TArguments]]],
+        id: str | None = None,
+        *,
+        env: Mapping[str, str] | None,
+        snapshot: SnapshotArgType,
+    ):
+        # Resolve all runs
+        runs = self._resolve_runs(runs)
+
+        # Create id if not provided
+        if id is None:
+            id = self.generate_id()
+
+        # Create the session directory
+        session_dir = self._session_dir(runs, id)
+
+        # Resolve the environment
+        env = self._resolve_env(env)
+
+        # Take a snapshot of the environment if needed
+        if (
+            snapshot_config := SnapshotConfig._from_nshrunner_ctor(
+                snapshot, configs=runs, base_dir=session_dir
+            )
+        ) is not None:
+            snapshot_path = snapshot_modules(snapshot_config)
+            # Update the environment to include the snapshot path
+            env = {
+                **env,
+                self.config.snapshot_env_name: str(snapshot_path),
+                "PYTHONPATH": f"{snapshot_path}:{os.environ.get('PYTHONPATH', '')}",
+            }
+
+        return runs, session_dir
+
     def local(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         """
         Runs a list of configs locally.
@@ -285,8 +306,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         runs : Sequence[tuple[Unpack[TArguments]]]
             A sequence of runs to run.
         """
-        runs = self._resolve_runs(runs)
-
+        runs, _ = self._setup_session(runs)
         for args in _tqdm_if_installed(runs):
             yield self.run_fn(*args)
 
