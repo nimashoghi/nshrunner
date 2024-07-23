@@ -450,7 +450,7 @@ def _write_batch_script_to_file(
         f.write(f"{command}\n")
 
 
-def _update_kwargs(kwargs_in: SlurmJobKwargs, base_path: Path):
+def _update_kwargs(kwargs_in: SlurmJobKwargs, logs_dir: Path):
     # Update the kwargs with the default values
     kwargs = copy.deepcopy(DEFAULT_KWARGS)
 
@@ -459,14 +459,12 @@ def _update_kwargs(kwargs_in: SlurmJobKwargs, base_path: Path):
     del kwargs_in
 
     # If out/err files are not specified, set them
-    logs_base = base_path.parent / "logs"
-    logs_base.mkdir(exist_ok=True)
-
     if kwargs.get("output_file") is None:
-        kwargs["output_file"] = logs_base / "output_%j_%a.out"
-
+        logs_dir.mkdir(exist_ok=True, parents=True)
+        kwargs["output_file"] = logs_dir / "output_%j_%a.out"
     if kwargs.get("error_file") is None:
-        kwargs["error_file"] = logs_base / "error_%j_%a.err"
+        logs_dir.mkdir(exist_ok=True, parents=True)
+        kwargs["error_file"] = logs_dir / "error_%j_%a.err"
 
     # Update the command_prefix to add srun:
     command_parts: list[str] = ["srun"]
@@ -536,7 +534,7 @@ def to_array_batch_script(
 
     from ..picklerunner.create import serialize_many
 
-    kwargs = _update_kwargs(kwargs, dest)
+    kwargs = _update_kwargs(kwargs, script_path.parent / "logs")
 
     # Convert the command/callable to a string for the command
 
