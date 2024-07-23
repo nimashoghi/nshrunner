@@ -282,14 +282,13 @@ def callable_to_command(
         case _:
             raise ValueError(f"Invalid execution mode: {execution['mode']}")
 
-    helper_path = script_path.with_suffix(".helper.sh")
     _write_helper_script(
-        helper_path,
+        script_path,
         command_inner,
         environment,
         setup_commands,
         prepend_command_with_exec=True,
     )
-    script_path_str = str(helper_path.absolute())
+    script_path_str = str(script_path.absolute())
     command = [part.format(script=script_path_str) for part in command_template]
     return command

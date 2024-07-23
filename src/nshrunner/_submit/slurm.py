@@ -511,6 +511,7 @@ def to_array_batch_script(
     command: str | Sequence[str],
     *,
     base_path: Path,
+    script_path: Path,
     num_jobs: int,
     job_index_variable: str | None = "SLURM_ARRAY_TASK_ID",
     config: SlurmJobKwargs,
@@ -527,7 +528,6 @@ def to_array_batch_script(
     if job_index_variable:
         command = command.replace("__NSHRUNNER_JOB_IDX__", job_index_variable)
 
-    script_path = base_path / "launch.sh"
     _write_batch_script_to_file(
         script_path,
         config,

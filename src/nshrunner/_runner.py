@@ -455,6 +455,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         submission = slurm.to_array_batch_script(
             command,
             base_path=command_base_dir,
+            script_path=command_base_dir / "launch.sh",
             num_jobs=len(runs),
             config=options,
         )
@@ -524,6 +525,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         submission = lsf.to_array_batch_script(
             command,
             base_path=command_base_dir,
+            script_path=command_base_dir / "launch.sh",
             num_jobs=len(runs),
             config=options,
         )
