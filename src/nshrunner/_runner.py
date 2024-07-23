@@ -96,7 +96,7 @@ class Config(C.Config):
 
 def _tqdm_if_installed(iterable: Iterable[T], *args, **kwargs) -> Iterable[T]:
     try:
-        from tqdm.auto import tqdm
+        from tqdm.auto import tqdm  # type: ignore
 
         return cast(Iterable[T], tqdm(iterable, *args, **kwargs))
     except ImportError:

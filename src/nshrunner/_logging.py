@@ -44,7 +44,7 @@ class PythonLoggingConfig(C.Config):
 def init_python_logging(config: PythonLoggingConfig):
     if config.lovely_tensors:
         try:
-            import lovely_tensors
+            import lovely_tensors  # type: ignore
 
             lovely_tensors.monkey_patch()
         except ImportError:
@@ -54,7 +54,7 @@ def init_python_logging(config: PythonLoggingConfig):
 
     if config.lovely_numpy:
         try:
-            import lovely_numpy
+            import lovely_numpy  # type: ignore
 
             lovely_numpy.set_config(repr=lovely_numpy.lovely)
         except ImportError:
@@ -70,7 +70,7 @@ def init_python_logging(config: PythonLoggingConfig):
 
     if config.rich:
         try:
-            from rich.logging import RichHandler
+            from rich.logging import RichHandler  # type: ignore
 
             log_handlers.append(RichHandler(rich_tracebacks=config.rich_tracebacks))
         except ImportError:

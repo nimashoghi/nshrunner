@@ -3,7 +3,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal, TypeAlias, cast
 
 import cloudpickle
 from typing_extensions import Required, TypedDict, TypeVarTuple, Unpack, override
@@ -289,10 +289,12 @@ def callable_to_command(
     )
     match execution:
         case {"mode": "sequential", **kwargs}:
-            command_inner = serialized_command.bash_command_sequential(**kwargs)
+            command_inner = serialized_command.bash_command_sequential(
+                **cast(Any, kwargs)
+            )
             del kwargs
         case {"mode": "array", **kwargs}:
-            command_inner = serialized_command.to_bash_command(**kwargs)
+            command_inner = serialized_command.to_bash_command(**cast(Any, kwargs))
             del kwargs
         case _:
             raise ValueError(f"Invalid execution mode: {execution['mode']}")

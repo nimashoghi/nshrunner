@@ -65,29 +65,3 @@ def add_snapshot_to_python_path(
 
     # Reset the import cache to ensure that the new modules are imported
     importlib.invalidate_caches()
-
-
-def load_python_path_from_run(run_dir: Path):
-    import yaml
-
-    if (hparams_path := next((run_dir / "log").glob("**/hparams.yaml"), None)) is None:
-        raise FileNotFoundError(f"Could not find hparams.yaml in {run_dir}")
-
-    config = yaml.unsafe_load(hparams_path.read_text())
-
-    # Find the ll_snapshot if it exists
-    if (
-        snapshot_path := next(
-            (
-                path
-                for path in config.get("environment", {}).get("python_path", [])
-                if path.stem == SNAPSHOT_DIR_NAME_DEFAULT and path.is_dir()
-            ),
-            None,
-        )
-    ) is None:
-        return
-
-    # Add it to the current python path
-    snapshot_path = Path(snapshot_path).absolute()
-    add_snapshot_to_python_path(snapshot_path)
