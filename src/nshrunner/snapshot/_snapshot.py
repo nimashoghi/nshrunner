@@ -4,20 +4,12 @@ import subprocess
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
-from ._constant import SNAPSHOT_DIR_NAME_DEFAULT
+from ._config import SnapshotConfig
 
 log = logging.getLogger(__name__)
-
-
-@dataclass(kw_only=True)
-class SnapshotInformation:
-    snapshot_dir: Path
-    moved_modules: dict[str, list[tuple[Path, Path]]]
 
 
 def _copy(source: Path, location: Path):
@@ -92,12 +84,7 @@ def resolve_snapshot_dir(
     return snapshot_dir
 
 
-def snapshot_modules(
-    snapshot_dir: Path,
-    modules: Sequence[str],
-    *,
-    snapshot_dir_name: str = SNAPSHOT_DIR_NAME_DEFAULT,
-):
+def _snapshot_modules(snapshot_dir: Path, modules: Sequence[str]):
     """
     Snapshot the specified modules to the given directory.
 
@@ -111,8 +98,6 @@ def snapshot_modules(
     Raises:
         AssertionError: If a module is not found or if a module has a non-directory location.
     """
-    snapshot_dir = snapshot_dir / snapshot_dir_name
-    snapshot_dir.mkdir(parents=True, exist_ok=True)
     log.critical(f"Snapshotting {modules=} to {snapshot_dir}")
 
     moved_modules = defaultdict[str, list[tuple[Path, Path]]](list)
@@ -148,58 +133,24 @@ def snapshot_modules(
     return snapshot_dir
 
 
-def snapshot(
-    self,
-    snapshot: bool | SnapshotConfig,
-    configs: Sequence[Any],
-    local_data_path: Path,
-):
-    # Handle snapshot
-    snapshot_config: SnapshotConfig | None = None
-    if snapshot is True:
-        snapshot_config = {**SNAPSHOT_CONFIG_DEFAULT}
-    elif snapshot is False:
-        snapshot_config = None
-    elif isinstance(snapshot, Mapping):
-        snapshot_config = {**SNAPSHOT_CONFIG_DEFAULT, **snapshot}
+def _ensure_supported():
+    # Make sure we have git and rsync installed
+    try:
+        subprocess.run(["git", "--version"], check=True)
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            "git is not installed. Please install git to use snapshot."
+        )
 
-    del snapshot
-    if snapshot_config is None:
-        return None
+    try:
+        subprocess.run(["rsync", "--version"], check=True)
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            "rsync is not installed. Please install rsync to use snapshot."
+        )
 
-    # Set the snapshot base to the user's home directory
-    snapshot_dir = snapshot_config.get("dir", local_data_path / "snapshot")
-    snapshot_dir.mkdir(exist_ok=True, parents=True)
 
-    snapshot_modules_set: set[str] = set()
-    snapshot_modules_set.update(snapshot_config.get("modules", []))
-    if snapshot_config.get("snapshot_ll", True):
-        # Resolve ll by taking the module of the runner class
-        ll_module = self.__class__.__module__.split(".", 1)[0]
-        if ll_module != "ll":
-            log.warning(
-                f"Runner class {self.__class__.__name__} is not in the 'll' module.\n"
-                "This is unexpected and may lead to issues with snapshotting."
-            )
-        snapshot_modules_set.add(ll_module)
-    if snapshot_config.get("snapshot_config_cls_module", True):
-        for config in configs:
-            # Resolve the root module of the config class
-            # NOTE: We also must handle the case where the config
-            #   class's module is "__main__" (i.e. the config class
-            #   is defined in the main script).
-            module = config.__class__.__module__
-            if module == "__main__":
-                log.warning(
-                    f"Config class {config.__class__.__name__} is defined in the main script.\n"
-                    "Snapshotting the main script is not supported.\n"
-                    "Skipping snapshotting of the config class's module."
-                )
-                continue
+def snapshot(config: SnapshotConfig):
+    _ensure_supported()
 
-            # Make sure to get the root module
-            module = module.split(".", 1)[0]
-            snapshot_modules_set.add(module)
-
-    snapshot_path = snapshot_modules(snapshot_dir, list(snapshot_modules_set))
-    return snapshot_path.absolute()
+    return _snapshot_modules(config.dir, config.modules).absolute()

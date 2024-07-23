@@ -26,7 +26,7 @@ from ._util.environment import (
 )
 from .log import init_python_logging
 from .model.config import BaseConfig
-from .snapshot import snapshot_modules
+from .snapshot import _snapshot_modules
 from .trainer import Trainer
 
 log = logging.getLogger(__name__)
@@ -754,7 +754,7 @@ class Runner(Generic[TConfig, TReturn, Unpack[TArguments]]):
                 module = module.split(".", 1)[0]
                 snapshot_modules_set.add(module)
 
-        snapshot_path = snapshot_modules(snapshot_dir, list(snapshot_modules_set))
+        snapshot_path = _snapshot_modules(snapshot_dir, list(snapshot_modules_set))
         return snapshot_path.absolute()
 
     @remove_lsf_environment_variables()
