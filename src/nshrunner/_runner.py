@@ -164,14 +164,6 @@ def _launch_session(
     ]
 
 
-def _default_info_fn(*args: Unpack[TArguments]) -> RunInfo:
-    return {}
-
-
-def _default_validate_fn(*args: Unpack[TArguments]) -> None:
-    pass
-
-
 def _shell_hook(env_path: Path):
     # Detect the environment type
     if env_path.joinpath("conda-meta", "history").exists():
@@ -191,15 +183,31 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
     config: Config
     run_fn: Callable[[Unpack[TArguments]], TReturn]
-    info_fn: Callable[[Unpack[TArguments]], RunInfo] = field(
-        default_factory=lambda: _default_info_fn
-    )
-    validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None] = (
-        field(default_factory=lambda: _default_validate_fn)
-    )
+    info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None
+    validate_fn: (
+        Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None] | None
+    ) = None
     transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]] = (
         field(default_factory=lambda: [])
     )
+
+    def default_info_fn(self, *args: Unpack[TArguments]) -> RunInfo:
+        return {}
+
+    def default_validate_fn(self, *args: Unpack[TArguments]) -> None:
+        pass
+
+    @property
+    def _resolved_info_fn(self) -> Callable[[Unpack[TArguments]], RunInfo]:
+        return self.default_info_fn if self.info_fn is None else self.info_fn
+
+    @property
+    def _resolved_validate_fn(
+        self,
+    ) -> Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]:
+        return (
+            self.default_validate_fn if self.validate_fn is None else self.validate_fn
+        )
 
     def _transform(self, *args: Unpack[TArguments]) -> tuple[Unpack[TArguments]]:
         for transform_fn in self.transform_fns:
@@ -211,8 +219,8 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         return _wrap_run_fn(
             self.config,
             self.run_fn,
-            self.info_fn,
-            self.validate_fn,
+            self._resolved_info_fn,
+            self._resolved_validate_fn,
         )
 
     def with_transform(
@@ -227,7 +235,9 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             return _gitignored_dir(Path(savedir) / "nshrunner", create=True)
 
         # If all configs have the same `project_root` config, use that instead.
-        project_root_paths = set(self.info_fn(*args).get("base_dir") for args in runs)
+        project_root_paths = set(
+            self._resolved_info_fn(*args).get("base_dir") for args in runs
+        )
         if (
             project_root_paths
             and len(project_root_paths) == 1
@@ -256,7 +266,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             ids = [
                 id_
                 for args in runs
-                if (id_ := self.info_fn(*args).get("id")) is not None
+                if (id_ := self._resolved_info_fn(*args).get("id")) is not None
             ]
             if len(ids) != len(set(ids)):
                 raise ValueError("Duplicate IDs found in the runs.")
@@ -573,10 +583,9 @@ class RunnerConfigDict(TypedDict, total=False):
 
 def runner(
     run_fn: Callable[[Unpack[TArguments]], TReturn],
-    info_fn: Callable[[Unpack[TArguments]], RunInfo] = _default_info_fn,
-    validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None] = (
-        _default_validate_fn
-    ),
+    info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
+    validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]
+    | None = None,
     transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]] = [],
     **config: Unpack[RunnerConfigDict],
 ):
