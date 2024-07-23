@@ -126,11 +126,6 @@ def _resolve_runs(
 _Path: TypeAlias = str | Path | os.PathLike
 
 
-@runtime_checkable
-class RunProtocol(Protocol[Unpack[TArguments], TReturn]):
-    def __call__(self, *args: Unpack[TArguments]) -> TReturn: ...
-
-
 TArguments = TypeVarTuple("TArguments")
 TReturn = TypeVar("TReturn", infer_variance=True)
 
@@ -198,9 +193,42 @@ def _wrap_run_fn(
     return wrapped_run_fn
 
 
+def _ensure_supports_session():
+    # Make sure we have session installed
+    try:
+        subprocess.run(["session", "--version"], check=True)
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            "session is not installed. Please install session to use snapshot."
+        )
+
+
+def _launch_session(
+    session_command: list[str],
+    config_base_path: Path,
+    session_name: str,
+    attach: bool = True,
+):
+    return [
+        "screen",
+        "-dmS" if not attach else "-S",
+        session_name,
+        # Save the logs to a file
+        "-L",
+        "-Logfile",
+        str((config_base_path / f"{session_name}.log").absolute()),
+        # Enable UTF-8 encoding
+        "-U",
+        *session_command,
+    ]
+
+
 class Runner(Generic[Unpack[TArguments], TReturn]):
     DEFAULT_ENV: dict[str, str] = {}
     SNAPSHOT_ENV_NAME = "LL_SNAPSHOT"
+
+    def generate_id(self):
+        return str(uuid.uuid4())
 
     def __init__(
         self,
@@ -247,7 +275,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
     def local(
         self,
-        runs: Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]],
+        runs: Sequence[tuple[Unpack[TArguments]]],
         env: Mapping[str, str] | None = None,
     ):
         """
@@ -255,7 +283,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         Parameters
         ----------
-        runs : Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]]
+        runs : Sequence[tuple[Unpack[TArguments]]]
             A sequence of runs to submit.
         env : Mapping[str, str], optional
             Additional environment variables to set.
@@ -263,9 +291,8 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         return_values: list[TReturn] = []
         for run in runs:
             config, args = _resolve_run(run)
-            with self._with_env(env or {}):
-                return_value = self._run_fn(config, *args)
-                return_values.append(return_value)
+            return_value = self.run_fn(*args)
+            return_values.append(return_value)
 
         return return_values
 
@@ -330,26 +357,6 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
 
         return return_values
 
-    def _launch_session(
-        self,
-        session_command: list[str],
-        config_base_path: Path,
-        session_name: str,
-        attach: bool = True,
-    ):
-        return [
-            "screen",
-            "-dmS" if not attach else "-S",
-            session_name,
-            # Save the logs to a file
-            "-L",
-            "-Logfile",
-            str((config_base_path / f"{session_name}.log").absolute()),
-            # Enable UTF-8 encoding
-            "-U",
-            *session_command,
-        ]
-
     def session(
         self,
         runs: Sequence[TConfig] | Sequence[tuple[TConfig, Unpack[TArguments]]],
@@ -364,7 +371,6 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         attach: bool = True,
         print_command: bool = True,
         python_command_prefix: str | None = None,
-        run_git_pre_commit_hook: bool = True,
     ):
         """
         Launches len(sessions) local runs in different environments using `screen`.
@@ -393,18 +399,14 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             Whether to print the command to the console.
         python_command_prefix : str, optional
             A prefix to add to the Python command. This would be used, for example, to run the Python command with a profiler (e.g., nsight-sys).
-        run_git_pre_commit_hook : bool, optional
-            Whether to run the Git pre-commit hook before launching the sessions.
         """
 
-        if run_git_pre_commit_hook:
-            if not self._run_git_pre_commit_hook():
-                raise ValueError("Git pre-commit hook failed. Aborting session launch.")
+        _ensure_supports_session()
 
         # Generate a random ID for the session.
         # We'll use this ID for snapshotting, as well as for
         #   defining the name of the shell script that will launch the sessions.
-        id = str(uuid.uuid4())
+        id = self.generate_id()
 
         # Resolve all runs
         resolved_runs = _resolve_runs(runs, validate=True)
@@ -458,7 +460,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         launcher_command = ["bash", str(launcher_path)]
 
         # Get the screen session command
-        command = self._launch_session(
+        command = _launch_session(
             launcher_command,
             config_pickle_save_path,
             name,
@@ -691,7 +693,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             scheduler = unified.infer_current_scheduler()
             log.critical(f"Inferred current scheduler as {scheduler}")
 
-        id = str(uuid.uuid4())
+        id = self.generate_id()
 
         resolved_runs = _resolve_runs(runs, reset_id=reset_id, validate=True)
         local_data_path = self._local_data_path(id, resolved_runs)
