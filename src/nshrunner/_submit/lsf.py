@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from deepmerge import always_merger
-from typing_extensions import TypeAlias, TypedDict, TypeVarTuple, Unpack
+from typing_extensions import TypeAlias, TypedDict, TypeVarTuple
 
 from ._output import SubmitOutput
 
