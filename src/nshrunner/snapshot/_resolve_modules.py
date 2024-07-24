@@ -20,9 +20,30 @@ def _resolve_leaf_module(module: str, ignore_builtin: bool):
     return (module,)
 
 
+def _resolve_type(
+    type_: type,
+    cached: dict[str, set[str]],
+    ignore_builtin: bool = True,
+):
+    if (cached_modules := cached.get(type_.__module__)) is not None:
+        return cached_modules
+
+    modules = set[str]()
+
+    # Resolve the module of the type
+    modules.update(_resolve_leaf_module(type_.__module__, ignore_builtin))
+
+    # Resolve the module of the type's bases
+    for base in type_.__bases__:
+        modules.update(_resolve_type(base, cached, ignore_builtin))
+
+    cached[type_.__module__] = modules
+    return modules
+
+
 def _resolve_modules_from_value(
     value: Any,
-    visited: set[str],
+    cached: dict[str, set[str]],
     ignore_builtin: bool = True,
 ):
     """
@@ -45,20 +66,26 @@ def _resolve_modules_from_value(
     ```
     """
     modules: set[str] = set()
+    is_type = False
 
     match value:
         # If type, resolve the module from the type
         # + all of its bases
         case type():
-            modules.update(_resolve_leaf_module(value.__module__, ignore_builtin))
-            for base in value.__bases__:
-                modules.update(
-                    _resolve_modules_from_value(
-                        base,
-                        visited,
-                        ignore_builtin=ignore_builtin,
-                    )
-                )
+            modules.update(_resolve_type(value, cached, ignore_builtin))
+            is_type = True
+        # If a primitive python type, just process the value
+        case (
+            int()
+            | float()
+            | str()
+            | bool()
+            | complex()
+            | bytes()
+            | bytearray()
+            | None
+        ):
+            pass
         # If a collection, resolve the module from each item.
         # First, we handle mappings because we need to resolve
         # the modules from the keys and values separately.
@@ -67,14 +94,14 @@ def _resolve_modules_from_value(
                 modules.update(
                     _resolve_modules_from_value(
                         key,
-                        visited,
+                        cached,
                         ignore_builtin=ignore_builtin,
                     )
                 )
                 modules.update(
                     _resolve_modules_from_value(
                         value,
-                        visited,
+                        cached,
                         ignore_builtin=ignore_builtin,
                     )
                 )
@@ -84,43 +111,37 @@ def _resolve_modules_from_value(
                 modules.update(
                     _resolve_modules_from_value(
                         item,
-                        visited,
+                        cached,
                         ignore_builtin=ignore_builtin,
                     )
                 )
         # Anything else that has a "__module__" attribute
         case _ if hasattr(value, "__module__"):
             modules.update(_resolve_leaf_module(value.__module__, ignore_builtin))
-            # Also process the parent type
-            modules.update(
-                _resolve_modules_from_value(
-                    type(value),
-                    visited,
-                    ignore_builtin=ignore_builtin,
-                )
-            )
-        # Anything else that doesn't have a "__module__" attribute -- we take the type
-        # and resolve the module from that.
         case _:
-            modules.update(
-                _resolve_modules_from_value(
-                    type(value),
-                    visited,
-                    ignore_builtin=ignore_builtin,
-                )
+            pass
+
+    # We should also resolve the type of the value, if it's not a type itself
+    if not is_type:
+        modules.update(
+            _resolve_modules_from_value(
+                type(value),
+                cached,
+                ignore_builtin=ignore_builtin,
             )
+        )
 
     return modules
 
 
 def _resolve_parent_modules(configs: abc.Sequence[Any], ignore_builtin: bool = True):
     modules = set[str]()
-    visited = set[str]()  # we can keep a global set of visited modules
+    cached = dict[str, set[str]]()  # we can keep a global set of visited modules
 
     for config in configs:
         config_modules = _resolve_modules_from_value(
             config,
-            visited,
+            cached,
             ignore_builtin=ignore_builtin,
         )
         if "__main__" in config_modules:
