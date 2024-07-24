@@ -180,7 +180,7 @@ class LSFJobKwargs(TypedDict, total=False):
     The signal to send to the job when it is preempted.
     """
 
-    signal_time: timedelta
+    timeout_signal_time: timedelta
     """
     The time (before the job ends) to send the signal.
 
@@ -202,8 +202,11 @@ DEFAULT_KWARGS: LSFJobKwargs = {
     # "rs_per_node": 1,
     # "walltime": timedelta(hours=2),
     "summit": False,
+    # On SIGURG:
+    # Important note from https://amrex-astro.github.io/workflow/olcf-workflow.html:
+    # We can also ask the job manager to send a warning signal some amount of time before the allocation expires by passing -wa 'signal' and -wt '[hour:]minute' to bsub. We can then have bash create a dump_and_stop file when it receives the signal, which will tell Castro to output a checkpoint file and exit cleanly after it finishes the current timestep. An important detail that I couldn't find documented anywhere is that the job manager sends the signal to all the processes in the job, not just the submission script, and we have to use a signal that is ignored by default so Castro doesn't immediately crash upon receiving it. SIGCHLD, SIGURG, and SIGWINCH are the only signals that fit this requirement and of these, SIGURG is the least likely to be triggered by other events.
     "timeout_signal": signal.SIGURG,
-    "signal_time": timedelta(minutes=5),
+    "timeout_signal_time": timedelta(minutes=5),
 }
 
 
@@ -364,7 +367,7 @@ def _write_batch_script_to_file(
             signal = signal[len("SIG") :]
             f.write(f"#BSUB -wa {signal}\n")
 
-        if (signal_time := kwargs.get("signal_time")) is not None:
+        if (signal_time := kwargs.get("timeout_signal_time")) is not None:
             # Convert from time-delta to "H:M"
             total_seconds = signal_time.total_seconds()
             hours = int(total_seconds // 3600)
