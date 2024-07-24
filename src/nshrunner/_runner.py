@@ -49,11 +49,6 @@ class RunInfo(TypedDict, total=False):
 
 TArguments = TypeVarTuple("TArguments")
 TReturn = TypeVar("TReturn", infer_variance=True)
-RunFn: TypeAlias = Callable[[Unpack[TArguments]], TReturn]
-InfoFn: TypeAlias = Callable[[Unpack[TArguments]], RunInfo]
-ValidateFn: TypeAlias = Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]
-TransformFn: TypeAlias = Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]
-RunList: TypeAlias = Iterable[tuple[Unpack[TArguments]]]
 
 
 @dataclass
@@ -127,9 +122,9 @@ def _tqdm_if_installed(iterable: Iterable[T], *args, **kwargs) -> Iterable[T]:
 
 def _wrap_run_fn(
     config: Config,
-    run_fn: RunFn[Unpack[TArguments], TReturn],
-    info_fn: InfoFn[Unpack[TArguments]],
-    validate_fn: ValidateFn[Unpack[TArguments]],
+    run_fn: Callable[[Unpack[TArguments]], TReturn],
+    info_fn: Callable[[Unpack[TArguments]], RunInfo],
+    validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None],
 ):
     @functools.wraps(run_fn)
     def wrapped_run_fn(*args: Unpack[TArguments]) -> TReturn:
@@ -212,12 +207,14 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
     def __init__(
         self,
-        run_fn: RunFn[Unpack[TArguments], TReturn],
+        run_fn: Callable[[Unpack[TArguments]], TReturn],
         config: Config | ConfigDict = {},
         *,
-        info_fn: InfoFn[Unpack[TArguments]] | None = None,
-        validate_fn: ValidateFn[Unpack[TArguments]] | None = None,
-        transform_fns: list[TransformFn[Unpack[TArguments]]] | None = None,
+        info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
+        validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]
+        | None = None,
+        transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
     ):
         if not isinstance(config, Config):
             config = Config(**config)
@@ -232,7 +229,9 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
     def transform_fn_generator(
         self,
-        additional_transforms: list[TransformFn[Unpack[TArguments]]],
+        additional_transforms: list[
+            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]
+        ],
     ):
         yield from self.transform_fns
         yield from additional_transforms
@@ -240,7 +239,9 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
     def _transform(
         self,
         *args: Unpack[TArguments],
-        additional_transforms: list[TransformFn[Unpack[TArguments]]],
+        additional_transforms: list[
+            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]
+        ],
     ) -> tuple[Unpack[TArguments]]:
         for transform_fn in self.transform_fn_generator(additional_transforms):
             args = transform_fn(*copy.deepcopy(args))
@@ -257,13 +258,13 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
     def with_transform(
         self,
-        transform_fn: TransformFn[Unpack[TArguments]],
+        transform_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]],
     ):
         runner = copy.deepcopy(self)
         runner.transform_fns.append(transform_fn)
         return runner
 
-    def _root_dir(self, runs: RunList[Unpack[TArguments]]):
+    def _root_dir(self, runs: Iterable[tuple[Unpack[TArguments]]]):
         # If the user has provided a `savedir`, use that as the base path.
         if (savedir := self.config.savedir) is not None:
             return _gitignored_dir(Path(savedir) / "nshrunner", create=True)
@@ -283,7 +284,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
     def _session_dir(
         self,
-        runs: RunList[Unpack[TArguments]],
+        runs: Iterable[tuple[Unpack[TArguments]]],
         id: str,
     ):
         root_dir = self._root_dir(runs)
@@ -291,8 +292,10 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
     def _resolve_runs(
         self,
-        runs: RunList[Unpack[TArguments]],
-        additional_transforms: list[TransformFn[Unpack[TArguments]]],
+        runs: Iterable[tuple[Unpack[TArguments]]],
+        additional_transforms: list[
+            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]
+        ],
     ):
         # First, run all the transforms
         runs = [
@@ -317,12 +320,12 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
     def _setup_session(
         self,
-        runs: RunList[Unpack[TArguments]],
+        runs: Iterable[tuple[Unpack[TArguments]]],
         id: str | None = None,
         *,
         env: Mapping[str, str] | None,
         snapshot: SnapshotArgType,
-        transforms: list[TransformFn[Unpack[TArguments]]],
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]],
     ):
         # Resolve all runs
         runs = self._resolve_runs(runs, additional_transforms=transforms)
@@ -359,10 +362,11 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
     def local_generator(
         self,
-        runs: RunList[Unpack[TArguments]],
+        runs: Iterable[tuple[Unpack[TArguments]]],
         *,
         env: Mapping[str, str] | None = None,
-        transforms: list[TransformFn[Unpack[TArguments]]] | None = None,
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
     ):
         runs, session = self._setup_session(
             runs,
@@ -387,21 +391,23 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
     def local(
         self,
-        runs: RunList[Unpack[TArguments]],
+        runs: Iterable[tuple[Unpack[TArguments]]],
         *,
         env: Mapping[str, str] | None = None,
-        transforms: list[TransformFn[Unpack[TArguments]]] | None = None,
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
     ):
         return list(self.local_generator(runs, env=env, transforms=transforms))
 
     def session(
         self,
-        runs: RunList[Unpack[TArguments]],
+        runs: Iterable[tuple[Unpack[TArguments]]],
         *,
         snapshot: SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
-        transforms: list[TransformFn[Unpack[TArguments]]] | None = None,
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
         activate_venv: bool = True,
         session_name: str = "nshrunner",
         attach: bool = True,
@@ -475,13 +481,14 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
     @remove_wandb_environment_variables()
     def submit_slurm(
         self,
-        runs: RunList[Unpack[TArguments]],
+        runs: Iterable[tuple[Unpack[TArguments]]],
         options: slurm.SlurmJobKwargs,
         *,
         snapshot: SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
-        transforms: list[TransformFn[Unpack[TArguments]]] | None = None,
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
         activate_venv: bool = True,
         print_command: bool = True,
     ):
@@ -554,13 +561,14 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
     @remove_wandb_environment_variables()
     def submit_lsf(
         self,
-        runs: RunList[Unpack[TArguments]],
+        runs: Iterable[tuple[Unpack[TArguments]]],
         options: lsf.LSFJobKwargs,
         *,
         snapshot: SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
-        transforms: list[TransformFn[Unpack[TArguments]]] | None = None,
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
         activate_venv: bool = True,
         print_command: bool = True,
     ):
