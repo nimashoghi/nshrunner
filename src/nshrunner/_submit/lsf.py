@@ -10,6 +10,7 @@ from typing import Literal, cast
 from deepmerge import always_merger
 from typing_extensions import TypeAlias, TypedDict, TypeVarTuple
 
+from ..picklerunner._util import JOB_INDEX_ENV_VAR
 from ._output import SubmitOutput
 
 log = logging.getLogger(__name__)
@@ -432,7 +433,7 @@ def to_array_batch_script(
     *,
     script_path: Path,
     num_jobs: int,
-    job_index_variable: str | None = "LSB_JOBINDEX",
+    job_index_variable: str = "LSB_JOBINDEX",
     config: LSFJobKwargs,
 ) -> SubmitOutput:
     """
@@ -441,9 +442,10 @@ def to_array_batch_script(
     if not isinstance(command, str):
         command = " ".join(command)
 
-    # Update the command to set __NSHRUNNER_JOB_IDX__ to the job index variable (if exists)
-    if job_index_variable:
-        command = command.replace("__NSHRUNNER_JOB_IDX__", job_index_variable)
+    # Update the command to set JOB_INDEX_ENV_VAR to the job index variable (if exists)
+    setup_commands = list(config.get("setup_commands", []))
+    setup_commands.insert(0, f"export {JOB_INDEX_ENV_VAR}=${job_index_variable}")
+    config["setup_commands"] = setup_commands
 
     _write_batch_script_to_file(
         script_path,

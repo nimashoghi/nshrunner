@@ -8,7 +8,7 @@ from typing import Any, Literal, TypeAlias, cast
 import cloudpickle
 from typing_extensions import Required, TypedDict, TypeVarTuple, Unpack, override
 
-from ._types import SerializedFunctionCallDict
+from ._util import JOB_INDEX_ENV_VAR, SerializedFunctionCallDict
 
 _Path: TypeAlias = str | Path | PathLike
 
@@ -78,7 +78,7 @@ class SerializedMultiFunction(PathLike):
 
     def to_bash_command(
         self,
-        job_index_variable: str = "__NSHRUNNER_JOB_IDX__",
+        job_index_variable: str = JOB_INDEX_ENV_VAR,
         python_executable: str | None = None,
         environment: Mapping[str, str] | None = None,
         print_environment_info: bool = False,

@@ -9,7 +9,7 @@ from typing import TypeAlias, cast
 
 import cloudpickle
 
-from ._types import SerializedFunctionCallDict
+from ._util import SerializedFunctionCallDict
 
 _Path: TypeAlias = str | Path | PathLike
 
