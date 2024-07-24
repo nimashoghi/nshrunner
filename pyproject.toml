@@ -12,7 +12,7 @@ typing-extensions = "*"
 cloudpickle = "*"
 deepmerge = "*"
 nshconfig = "^0"
-nshutils = "^0"
+nshutils = "^0.6.1"
 
 [tool.poetry.scripts]
 nshrunner-picklerunner = "nshrunner.picklerunner.main:main"
@@ -22,6 +22,7 @@ ruff = "^0.5.4"
 ipykernel = "^6.29.5"
 ipywidgets = "^8.1.3"
 pyright = "^1.1.372"
+pysnooper = "^1.2.0"
 
 [build-system]
 requires = ["poetry-core"]

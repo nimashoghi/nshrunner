@@ -9,6 +9,7 @@ import nshconfig as C
 from typing_extensions import TypedDict, assert_never
 
 from .._util.git import _gitignored_dir
+from ._resolve_modules import _resolve_parent_modules
 
 log = logging.getLogger(__name__)
 
@@ -56,30 +57,6 @@ class SnapshotConfig(C.Config):
             case _:
                 assert_never(value)
         return cls(modules=modules, dir=_resolve_dir(base_dir))
-
-
-def _resolve_parent_modules(configs: Sequence[Any]):
-    modules_set = set[str]()
-
-    for config in configs:
-        # Resolve the root module of the config class
-        # NOTE: We also must handle the case where the config
-        #   class's module is "__main__" (i.e. the config class
-        #   is defined in the main script).
-        module = config.__class__.__module__
-        if module == "__main__":
-            log.warning(
-                f"Config class {config.__class__.__name__} is defined in the main script.\n"
-                "Snapshotting the main script is not supported.\n"
-                "Skipping snapshotting of the config class's module."
-            )
-            continue
-
-        # Make sure to get the root module
-        module = module.split(".", 1)[0]
-        modules_set.add(module)
-
-    return list(modules_set)
 
 
 def _resolve_dir(base_dir: Path | None = None):
