@@ -361,7 +361,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         return runs, session
 
-    def local(
+    def local_generator(
         self,
         runs: Sequence[tuple[Unpack[TArguments]]],
         *,
@@ -369,14 +369,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
         | None = None,
     ):
-        """
-        Runs a list of configs locally.
-
-        Parameters
-        ----------
-        runs : Sequence[tuple[Unpack[TArguments]]]
-            A sequence of runs to run.
-        """
         runs, session = self._setup_session(
             runs,
             env=env,
@@ -397,6 +389,16 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
             for args in _tqdm_if_installed(runs):
                 yield self._wrapped_run_fn(*args)
+
+    def local(
+        self,
+        runs: Sequence[tuple[Unpack[TArguments]]],
+        *,
+        env: Mapping[str, str] | None = None,
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
+    ):
+        return list(self.local_generator(runs, env=env, transforms=transforms))
 
     def session(
         self,
