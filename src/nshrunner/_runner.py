@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Generic, TypeAlias, cast
 
 import nshconfig as C
-from plum import dispatch, overload
 from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack
 
 from ._logging import PythonLoggingConfig, init_python_logging
@@ -213,11 +212,11 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
     def default_validate_fn(cls, *args: Unpack[TArguments]) -> None:
         pass
 
-    @overload
     def __init__(
         self,
-        config: Config | ConfigDict,
         run_fn: Callable[[Unpack[TArguments]], TReturn],
+        config: Config | ConfigDict = {},
+        *,
         info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
         validate_fn: (
             Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None] | None
@@ -235,30 +234,6 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             validate_fn if validate_fn is not None else self.default_validate_fn
         )
         self.transform_fns = transform_fns or []
-
-    @overload
-    def __init__(
-        self,
-        run_fn: Callable[[Unpack[TArguments]], TReturn],
-        info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
-        validate_fn: (
-            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None] | None
-        ) = None,
-        transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
-        | None = None,
-        **config: Unpack[ConfigDict],
-    ):
-        self.config = Config(**config)
-        self.run_fn = run_fn
-        self.info_fn = info_fn if info_fn is not None else self.default_info_fn
-        self.validate_fn = (
-            validate_fn if validate_fn is not None else self.default_validate_fn
-        )
-        self.transform_fns = transform_fns or []
-
-    @dispatch
-    def __init__(self, *args, **kwargs):
-        pass
 
     def _transform(self, *args: Unpack[TArguments]) -> tuple[Unpack[TArguments]]:
         for transform_fn in self.transform_fns:

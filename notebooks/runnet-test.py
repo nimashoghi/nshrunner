@@ -8,9 +8,7 @@ def run_fn(x: int):
 
 runs = [(1,)]
 
-runner = R.runner(
-    run_fn,
-)
+runner = R.Runner(run_fn)
 
 # %%
 list(runner.local(runs))
