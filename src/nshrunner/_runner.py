@@ -154,7 +154,12 @@ def _wrap_run_fn(
 def _ensure_supports_session():
     # Make sure we have screen installed
     try:
-        subprocess.run(["screen", "--version"], check=True)
+        subprocess.run(
+            ["screen", "--version"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
     except FileNotFoundError:
         raise FileNotFoundError(
             "screen is not installed. Please install screen to use snapshot."

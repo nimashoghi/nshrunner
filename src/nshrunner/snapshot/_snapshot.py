@@ -145,14 +145,24 @@ def _snapshot_modules(snapshot_dir: Path, modules: list[str]):
 def _ensure_supported():
     # Make sure we have git and rsync installed
     try:
-        subprocess.run(["git", "--version"], check=True)
+        subprocess.run(
+            ["git", "--version"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
     except FileNotFoundError:
         raise FileNotFoundError(
             "git is not installed. Please install git to use snapshot."
         )
 
     try:
-        subprocess.run(["rsync", "--version"], check=True)
+        subprocess.run(
+            ["rsync", "--version"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
     except FileNotFoundError:
         raise FileNotFoundError(
             "rsync is not installed. Please install rsync to use snapshot."

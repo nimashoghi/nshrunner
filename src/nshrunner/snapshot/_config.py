@@ -56,6 +56,8 @@ class SnapshotConfig(C.Config):
                     modules = [*modules, *_resolve_parent_modules(configs)]
             case _:
                 assert_never(value)
+
+        log.critical(f"Resolved modules: {' '.join(modules)}")
         return cls(modules=modules, dir=_resolve_dir(base_dir))
 
 
@@ -67,4 +69,5 @@ def _resolve_dir(base_dir: Path | None = None):
 
     id_ = f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}--{str(uuid.uuid4())}"
     dir_ = _gitignored_dir(_gitignored_dir(base_dir / "snapshots") / id_)
+    log.critical(f"Resolved snapshot dir: {dir_}")
     return dir_
