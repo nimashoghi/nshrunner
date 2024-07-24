@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nshrunner"
-version = "0.7.0"
+version = "0.8.0"
 description = ""
 authors = ["Nima Shoghi <nimashoghi@gmail.com>"]
 readme = "README.md"
@@ -11,8 +11,8 @@ tqdm = { version = "*", optional = true }
 typing-extensions = "*"
 cloudpickle = "*"
 deepmerge = "*"
-nshconfig = "^0.2.0"
-nshutils = "^0.5.0"
+nshconfig = "^0"
+nshutils = "^0"
 
 [tool.poetry.scripts]
 nshrunner-picklerunner = "nshrunner.picklerunner.main:main"
