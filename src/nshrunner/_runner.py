@@ -228,8 +228,23 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         )
         self.transform_fns = transform_fns or []
 
-    def _transform(self, *args: Unpack[TArguments]) -> tuple[Unpack[TArguments]]:
-        for transform_fn in self.transform_fns:
+    def transform_fn_generator(
+        self,
+        additional_transforms: list[
+            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]
+        ],
+    ):
+        yield from self.transform_fns
+        yield from additional_transforms
+
+    def _transform(
+        self,
+        *args: Unpack[TArguments],
+        additional_transforms: list[
+            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]
+        ],
+    ) -> tuple[Unpack[TArguments]]:
+        for transform_fn in self.transform_fn_generator(additional_transforms):
             args = transform_fn(*copy.deepcopy(args))
         return args
 
@@ -276,9 +291,18 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         root_dir = self._root_dir(runs)
         return _gitignored_dir(root_dir / id, create=True)
 
-    def _resolve_runs(self, runs: Sequence[tuple[Unpack[TArguments]]]):
+    def _resolve_runs(
+        self,
+        runs: Sequence[tuple[Unpack[TArguments]]],
+        additional_transforms: list[
+            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]
+        ],
+    ):
         # First, run all the transforms
-        runs = [self._transform(*args) for args in runs]
+        runs = [
+            self._transform(*args, additional_transforms=additional_transforms)
+            for args in runs
+        ]
 
         # Validate that there are no duplicate IDs
         if self.config.validate_no_duplicate_ids:
@@ -302,9 +326,10 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         *,
         env: Mapping[str, str] | None,
         snapshot: SnapshotArgType,
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]],
     ):
         # Resolve all runs
-        runs = self._resolve_runs(runs)
+        runs = self._resolve_runs(runs, additional_transforms=transforms)
 
         # Create id if not provided
         if id is None:
@@ -341,6 +366,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs: Sequence[tuple[Unpack[TArguments]]],
         *,
         env: Mapping[str, str] | None = None,
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
     ):
         """
         Runs a list of configs locally.
@@ -350,7 +377,12 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs : Sequence[tuple[Unpack[TArguments]]]
             A sequence of runs to run.
         """
-        runs, session = self._setup_session(runs, env=env, snapshot=False)
+        runs, session = self._setup_session(
+            runs,
+            env=env,
+            snapshot=False,
+            transforms=transforms or [],
+        )
 
         with contextlib.ExitStack() as stack:
             if session.env:
@@ -364,7 +396,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
                 )
 
             for args in _tqdm_if_installed(runs):
-                yield self.run_fn(*args)
+                yield self._wrapped_run_fn(*args)
 
     def session(
         self,
@@ -373,6 +405,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         snapshot: SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
         activate_venv: bool = True,
         session_name: str = "nshrunner",
         attach: bool = True,
@@ -383,7 +417,12 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         _ensure_supports_session()
 
         # Resolve all runs
-        runs, session = self._setup_session(runs, env=env, snapshot=snapshot)
+        runs, session = self._setup_session(
+            runs,
+            env=env,
+            snapshot=snapshot,
+            transforms=transforms or [],
+        )
 
         # Use setup commands to directly put env/pythonpath into the session bash script
         setup_commands_pre: list[str] = []
@@ -447,11 +486,18 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         snapshot: SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
         activate_venv: bool = True,
         print_command: bool = True,
     ):
         # Resolve all runs
-        runs, session = self._setup_session(runs, env=env, snapshot=snapshot)
+        runs, session = self._setup_session(
+            runs,
+            env=env,
+            snapshot=snapshot,
+            transforms=transforms or [],
+        )
         base_dir = session.dir_path / "submit"
         base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -520,11 +566,18 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         snapshot: SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
+        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
         activate_venv: bool = True,
         print_command: bool = True,
     ):
         # Resolve all runs
-        runs, session = self._setup_session(runs, env=env, snapshot=snapshot)
+        runs, session = self._setup_session(
+            runs,
+            env=env,
+            snapshot=snapshot,
+            transforms=transforms or [],
+        )
         base_dir = session.dir_path / "submit"
         base_dir.mkdir(parents=True, exist_ok=True)
 
