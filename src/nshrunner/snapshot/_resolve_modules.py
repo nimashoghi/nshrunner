@@ -1,3 +1,4 @@
+import functools
 import logging
 import sys
 from collections import abc
@@ -8,6 +9,7 @@ log = logging.getLogger(__name__)
 _builtin_or_std_modules = sys.stdlib_module_names.union(sys.builtin_module_names)
 
 
+@functools.cache
 def _resolve_leaf_module(module: str, ignore_builtin: bool):
     # First, resolve the module name into its first part. E.g.,:
     # mymodule.submodule.MyClass => mymodule
@@ -24,6 +26,7 @@ def _resolve_type(
     type_: type,
     cached: dict[str, set[str]],
     ignore_builtin: bool = True,
+    deep: bool = False,
 ):
     if (cached_modules := cached.get(type_.__module__)) is not None:
         return cached_modules
@@ -34,17 +37,26 @@ def _resolve_type(
     modules.update(_resolve_leaf_module(type_.__module__, ignore_builtin))
 
     # Resolve the module of the type's bases
-    for base in type_.__bases__:
-        modules.update(_resolve_type(base, cached, ignore_builtin))
+    if deep:
+        for base in type_.__bases__:
+            modules.update(_resolve_type(base, cached, ignore_builtin, deep))
 
     cached[type_.__module__] = modules
     return modules
+
+
+def _filter_container_shallow(value: abc.Collection | abc.Mapping):
+    # When deep=False, we only look inside containers if they are built-in types.
+    # In other words, whenever we hit a user-defined class, we stop looking inside it.
+
+    return _resolve_leaf_module(type(value).__module__, ignore_builtin=True) == ()
 
 
 def _resolve_modules_from_value(
     value: Any,
     cached: dict[str, set[str]],
     ignore_builtin: bool = True,
+    deep: bool = False,
 ):
     """
     Resolve the modules from the given value.
@@ -72,7 +84,7 @@ def _resolve_modules_from_value(
         # If type, resolve the module from the type
         # + all of its bases
         case type():
-            modules.update(_resolve_type(value, cached, ignore_builtin))
+            modules.update(_resolve_type(value, cached, ignore_builtin, deep))
             is_type = True
         # If a primitive python type, just process the value
         case (
@@ -89,7 +101,7 @@ def _resolve_modules_from_value(
         # If a collection, resolve the module from each item.
         # First, we handle mappings because we need to resolve
         # the modules from the keys and values separately.
-        case abc.Mapping():
+        case abc.Mapping() if deep or _filter_container_shallow(value):
             for key, value in value.items():
                 modules.update(
                     _resolve_modules_from_value(
@@ -106,7 +118,7 @@ def _resolve_modules_from_value(
                     )
                 )
         # Now, we handle any other collection
-        case abc.Collection():
+        case abc.Collection() if deep or _filter_container_shallow(value):
             for item in value:
                 modules.update(
                     _resolve_modules_from_value(
@@ -134,7 +146,11 @@ def _resolve_modules_from_value(
     return modules
 
 
-def _resolve_parent_modules(configs: abc.Sequence[Any], ignore_builtin: bool = True):
+def _resolve_parent_modules(
+    configs: abc.Sequence[Any],
+    ignore_builtin: bool = True,
+    deep: bool = False,
+):
     modules = set[str]()
     cached = dict[str, set[str]]()  # we can keep a global set of visited modules
 
@@ -143,6 +159,7 @@ def _resolve_parent_modules(configs: abc.Sequence[Any], ignore_builtin: bool = T
             config,
             cached,
             ignore_builtin=ignore_builtin,
+            deep=deep,
         )
         if "__main__" in config_modules:
             log.warning(
