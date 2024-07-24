@@ -385,7 +385,7 @@ def _write_batch_script_to_file(
     return path
 
 
-def _update_kwargs(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
+def update_options(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
     # Update the kwargs with the default values
     global DEFAULT_KWARGS
     kwargs = copy.deepcopy(DEFAULT_KWARGS)
@@ -399,14 +399,22 @@ def _update_kwargs(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
     kwargs = cast(LSFJobKwargs, always_merger.merge(kwargs, kwargs_in))
     del kwargs_in
 
+    # Update the kwargs to set the command prefix for jsrun
     kwargs = _update_kwargs_jsrun(kwargs, base_dir)
+
+    # Update the environment variables to include the timeout signal
+    if (signal := kwargs.get("signal")) is not None:
+        kwargs["environment"] = always_merger.merge(
+            kwargs.get("environment", {}),
+            {"NSHRUNNER_TIMEOUT_SIGNAL": signal.name},
+        )
+
     return kwargs
 
 
 def to_array_batch_script(
     command: str | Sequence[str],
     *,
-    base_path: Path,
     script_path: Path,
     num_jobs: int,
     job_index_variable: str | None = "LSB_JOBINDEX",
@@ -417,8 +425,6 @@ def to_array_batch_script(
     """
     if not isinstance(command, str):
         command = " ".join(command)
-
-    config = _update_kwargs(config, base_path / "logs")
 
     # Update the command to set __NSHRUNNER_JOB_IDX__ to the job index variable (if exists)
     if job_index_variable:

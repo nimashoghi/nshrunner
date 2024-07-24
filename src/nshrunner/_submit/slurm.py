@@ -442,7 +442,7 @@ def _write_batch_script_to_file(
         f.write(f"{command}\n")
 
 
-def _update_kwargs(kwargs_in: SlurmJobKwargs, logs_dir: Path):
+def update_options(kwargs_in: SlurmJobKwargs, base_dir: Path):
     # Update the kwargs with the default values
     kwargs = copy.deepcopy(DEFAULT_KWARGS)
 
@@ -451,6 +451,7 @@ def _update_kwargs(kwargs_in: SlurmJobKwargs, logs_dir: Path):
     del kwargs_in
 
     # If out/err files are not specified, set them
+    logs_dir = base_dir / "logs"
     if kwargs.get("output_file") is None:
         logs_dir.mkdir(exist_ok=True, parents=True)
         kwargs["output_file"] = logs_dir / "output_%j_%a.out"
@@ -510,7 +511,6 @@ def _update_kwargs(kwargs_in: SlurmJobKwargs, logs_dir: Path):
 def to_array_batch_script(
     command: str | Sequence[str],
     *,
-    base_path: Path,
     script_path: Path,
     num_jobs: int,
     job_index_variable: str | None = "SLURM_ARRAY_TASK_ID",
@@ -521,8 +521,6 @@ def to_array_batch_script(
     """
     if not isinstance(command, str):
         command = " ".join(command)
-
-    config = _update_kwargs(config, base_path / "logs")
 
     # Update the command to set __NSHRUNNER_JOB_IDX__ to the job index variable (if exists)
     if job_index_variable:

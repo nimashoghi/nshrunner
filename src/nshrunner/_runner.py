@@ -18,7 +18,6 @@ from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack
 from ._logging import PythonLoggingConfig, init_python_logging
 from ._seed import SeedConfig
 from ._submit import lsf, slurm
-from ._submit.slurm import SlurmJobKwargs
 from ._util.env import _with_env, _with_pythonpath_prepend
 from ._util.environment import (
     remove_lsf_environment_variables,
@@ -448,7 +447,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
     def submit_slurm(
         self,
         runs: Sequence[tuple[Unpack[TArguments]]],
-        options: SlurmJobKwargs,
+        options: slurm.SlurmJobKwargs,
         *,
         snapshot: SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
@@ -456,16 +455,18 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         activate_venv: bool = True,
         print_command: bool = True,
     ):
-        # Make sure the `session` utility is installed
-        _ensure_supports_session()
-
         # Resolve all runs
         runs, session = self._setup_session(runs, env=env, snapshot=snapshot)
+        base_dir = session.dir_path / "submit"
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        # Update the SLURM options
+        options = slurm.update_options(options, base_dir)
 
         # Use setup commands to directly put env/pythonpath into the session bash script
         setup_commands_pre: list[str] = []
-        if session.env:
-            for key, value in session.env.items():
+        if merged_env := {**session.env, **options.get("environment", {})}:
+            for key, value in merged_env.items():
                 setup_commands_pre.append(f"export {key}={value}")
         if session.snapshot is not None:
             setup_commands_pre.append(
@@ -477,15 +478,17 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             setup_commands_pre.append(_shell_hook(Path(sys.prefix)))
 
         # Merge the setup commands
-        setup_commands = setup_commands_pre + list(setup_commands or [])
+        setup_commands = (
+            setup_commands_pre
+            + list(setup_commands or [])
+            + list(options.get("setup_commands", []))
+        )
         del setup_commands_pre
 
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
 
-        command_base_dir = session.dir_path / "submit"
-        command_base_dir.mkdir(parents=True, exist_ok=True)
-        script_path = command_base_dir / "launcher.sh"
+        script_path = base_dir / "launcher.sh"
         command = callable_to_command(
             script_path,
             self._wrapped_run_fn,
@@ -498,8 +501,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         # Create the submission script
         submission = slurm.to_array_batch_script(
             command,
-            base_path=command_base_dir,
-            script_path=command_base_dir / "launch.sh",
+            script_path=base_dir / "launch.sh",
             num_jobs=len(runs),
             config=options,
         )
@@ -526,16 +528,18 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         activate_venv: bool = True,
         print_command: bool = True,
     ):
-        # Make sure the `session` utility is installed
-        _ensure_supports_session()
-
         # Resolve all runs
         runs, session = self._setup_session(runs, env=env, snapshot=snapshot)
+        base_dir = session.dir_path / "submit"
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        # Update the LSF options
+        options = lsf.update_options(options, base_dir)
 
         # Use setup commands to directly put env/pythonpath into the session bash script
         setup_commands_pre: list[str] = []
-        if session.env:
-            for key, value in session.env.items():
+        if merged_env := {**session.env, **options.get("environment", {})}:
+            for key, value in merged_env.items():
                 setup_commands_pre.append(f"export {key}={value}")
         if session.snapshot is not None:
             setup_commands_pre.append(
@@ -547,15 +551,17 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             setup_commands_pre.append(_shell_hook(Path(sys.prefix)))
 
         # Merge the setup commands
-        setup_commands = setup_commands_pre + list(setup_commands or [])
+        setup_commands = (
+            setup_commands_pre
+            + list(setup_commands or [])
+            + list(options.get("setup_commands", []))
+        )
         del setup_commands_pre
 
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
 
-        command_base_dir = session.dir_path / "submit"
-        command_base_dir.mkdir(parents=True, exist_ok=True)
-        script_path = command_base_dir / "launcher.sh"
+        script_path = base_dir / "launcher.sh"
         command = callable_to_command(
             script_path,
             self._wrapped_run_fn,
@@ -568,8 +574,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         # Create the submission script
         submission = lsf.to_array_batch_script(
             command,
-            base_path=command_base_dir,
-            script_path=command_base_dir / "launch.sh",
+            script_path=base_dir / "launch.sh",
             num_jobs=len(runs),
             config=options,
         )
