@@ -7,12 +7,13 @@ import subprocess
 import sys
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Generic, TypeAlias, cast
+from typing import Generic, TypeAlias, cast
 
 import nshconfig as C
+from plum import dispatch, overload
 from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack
 
 from ._logging import PythonLoggingConfig, init_python_logging
@@ -31,7 +32,7 @@ from .snapshot import SnapshotArgType, SnapshotConfig, SnapshotInfo, snapshot_mo
 log = logging.getLogger(__name__)
 
 
-@dataclass()
+@dataclass
 class Session:
     id: str
     """The ID of the session."""
@@ -91,6 +92,30 @@ class Config(C.Config):
     """Whether to validate that there are no duplicate IDs in the runs."""
 
     snapshot_env_name: str = "NSHRUNNER_SNAPSHOT_PATH"
+    """The name of the environment variable to set the snapshot path to."""
+
+
+class ConfigDict(TypedDict, total=False):
+    savedir: _Path
+    """
+    The `savedir` parameter is a string that represents the directory where the program will save its execution files and logs.
+        This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
+        If `None`, this will default to the current working directory / `llrunner`.
+    """
+
+    python_logging: PythonLoggingConfig
+    """Logging configuration for the runner."""
+
+    seed: SeedConfig
+    """Seed configuration for the runner."""
+
+    env: Mapping[str, str]
+    """Environment variables to set for the session."""
+
+    validate_no_duplicate_ids: bool
+    """Whether to validate that there are no duplicate IDs in the runs."""
+
+    snapshot_env_name: str
     """The name of the environment variable to set the snapshot path to."""
 
 
@@ -176,38 +201,64 @@ def _shell_hook(env_path: Path):
         raise ValueError(f"Unable to detect the environment type for {env_path}")
 
 
-@dataclass(frozen=True)
 class Runner(Generic[Unpack[TArguments], TReturn]):
     def generate_id(self):
         return str(uuid.uuid4())
 
-    config: Config
-    run_fn: Callable[[Unpack[TArguments]], TReturn]
-    info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None
-    validate_fn: (
-        Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None] | None
-    ) = None
-    transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]] = (
-        field(default_factory=lambda: [])
-    )
-
-    def default_info_fn(self, *args: Unpack[TArguments]) -> RunInfo:
+    @classmethod
+    def default_info_fn(cls, *args: Unpack[TArguments]) -> RunInfo:
         return {}
 
-    def default_validate_fn(self, *args: Unpack[TArguments]) -> None:
+    @classmethod
+    def default_validate_fn(cls, *args: Unpack[TArguments]) -> None:
         pass
 
-    @property
-    def _resolved_info_fn(self) -> Callable[[Unpack[TArguments]], RunInfo]:
-        return self.default_info_fn if self.info_fn is None else self.info_fn
-
-    @property
-    def _resolved_validate_fn(
+    @overload
+    def __init__(
         self,
-    ) -> Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]:
-        return (
-            self.default_validate_fn if self.validate_fn is None else self.validate_fn
+        config: Config | ConfigDict,
+        run_fn: Callable[[Unpack[TArguments]], TReturn],
+        info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
+        validate_fn: (
+            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None] | None
+        ) = None,
+        transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
+    ):
+        if not isinstance(config, Config):
+            config = Config(**config)
+
+        self.config = config
+        self.run_fn = run_fn
+        self.info_fn = info_fn if info_fn is not None else self.default_info_fn
+        self.validate_fn = (
+            validate_fn if validate_fn is not None else self.default_validate_fn
         )
+        self.transform_fns = transform_fns or []
+
+    @overload
+    def __init__(
+        self,
+        run_fn: Callable[[Unpack[TArguments]], TReturn],
+        info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
+        validate_fn: (
+            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None] | None
+        ) = None,
+        transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
+        | None = None,
+        **config: Unpack[ConfigDict],
+    ):
+        self.config = Config(**config)
+        self.run_fn = run_fn
+        self.info_fn = info_fn if info_fn is not None else self.default_info_fn
+        self.validate_fn = (
+            validate_fn if validate_fn is not None else self.default_validate_fn
+        )
+        self.transform_fns = transform_fns or []
+
+    @dispatch
+    def __init__(self, *args, **kwargs):
+        pass
 
     def _transform(self, *args: Unpack[TArguments]) -> tuple[Unpack[TArguments]]:
         for transform_fn in self.transform_fns:
@@ -219,15 +270,17 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
         return _wrap_run_fn(
             self.config,
             self.run_fn,
-            self._resolved_info_fn,
-            self._resolved_validate_fn,
+            self.info_fn,
+            self.validate_fn,
         )
 
     def with_transform(
         self,
         transform_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]],
     ):
-        return replace(self, transform_fns=[*self.transform_fns, transform_fn])
+        runner = copy.deepcopy(self)
+        runner.transform_fns.append(transform_fn)
+        return runner
 
     def _root_dir(self, runs: Sequence[tuple[Unpack[TArguments]]]):
         # If the user has provided a `savedir`, use that as the base path.
@@ -235,9 +288,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             return _gitignored_dir(Path(savedir) / "nshrunner", create=True)
 
         # If all configs have the same `project_root` config, use that instead.
-        project_root_paths = set(
-            self._resolved_info_fn(*args).get("base_dir") for args in runs
-        )
+        project_root_paths = set(self.info_fn(*args).get("base_dir") for args in runs)
         if (
             project_root_paths
             and len(project_root_paths) == 1
@@ -266,7 +317,7 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             ids = [
                 id_
                 for args in runs
-                if (id_ := self._resolved_info_fn(*args).get("id")) is not None
+                if (id_ := self.info_fn(*args).get("id")) is not None
             ]
             if len(ids) != len(set(ids)):
                 raise ValueError("Duplicate IDs found in the runs.")
@@ -555,44 +606,3 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             )
 
         return submission
-
-
-class RunnerConfigDict(TypedDict, total=False):
-    savedir: _Path
-    """
-    The `savedir` parameter is a string that represents the directory where the program will save its execution files and logs.
-        This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
-        If `None`, this will default to the current working directory / `llrunner`.
-    """
-
-    python_logging: PythonLoggingConfig
-    """Logging configuration for the runner."""
-
-    seed: SeedConfig
-    """Seed configuration for the runner."""
-
-    env: Mapping[str, str]
-    """Environment variables to set for the session."""
-
-    validate_no_duplicate_ids: bool
-    """Whether to validate that there are no duplicate IDs in the runs."""
-
-    snapshot_env_name: str
-    """The name of the environment variable to set the snapshot path to."""
-
-
-def runner(
-    run_fn: Callable[[Unpack[TArguments]], TReturn],
-    info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
-    validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]
-    | None = None,
-    transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]] = [],
-    **config: Unpack[RunnerConfigDict],
-):
-    return Runner(
-        config=Config(**cast(Any, config)),
-        run_fn=run_fn,
-        info_fn=info_fn,
-        validate_fn=validate_fn,
-        transform_fns=transform_fns,
-    )
