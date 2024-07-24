@@ -198,18 +198,23 @@ class SlurmJobKwargs(TypedDict, total=False):
     This corresponds to the "--exclusive" option in sbatch.
     """
 
-    signal: signal.Signals
+    timeout_signal: signal.Signals
     """
     The signal to send to the job when the job is being terminated.
 
     This corresponds to the "--signal" option in sbatch.
     """
 
-    signal_delay: timedelta
+    timeout_signal_delay: timedelta
     """
     The delay before sending the signal to the job.
 
     This corresponds to the "--signal ...@[delay]" option in sbatch.
+    """
+
+    preempt_signal: signal.Signals
+    """
+    The signal to send to the job when it is preempted.
     """
 
     open_mode: str
@@ -259,8 +264,9 @@ DEFAULT_KWARGS: SlurmJobKwargs = {
     "name": "ll",
     # "nodes": 1,
     # "time": timedelta(hours=2),
-    "signal": signal.SIGURG,
-    "signal_delay": timedelta(seconds=90),
+    "timeout_signal": signal.SIGURG,
+    "timeout_signal_delay": timedelta(seconds=90),
+    "preempt_signal": signal.SIGTERM,
     "open_mode": "append",
     # "requeue": True,
 }
@@ -425,9 +431,9 @@ def _write_batch_script_to_file(
                 constraint = [constraint]
             f.write(f"#SBATCH --constraint={','.join(constraint)}\n")
 
-        if (signal := kwargs.get("signal")) is not None:
+        if (signal := kwargs.get("timeout_signal")) is not None:
             signal_str = signal.name
-            if (signal_delay := kwargs.get("signal_delay")) is not None:
+            if (signal_delay := kwargs.get("timeout_signal_delay")) is not None:
                 signal_str += f"@{math.ceil(signal_delay.total_seconds())}"
             f.write(f"#SBATCH --signal={signal_str}\n")
 
@@ -504,6 +510,20 @@ def update_options(kwargs_in: SlurmJobKwargs, base_dir: Path):
         command_parts.extend(existing_command_prefix.split())
     # Add the command prefix to the kwargs.
     kwargs["command_prefix"] = " ".join(command_parts)
+
+    # Update the environment variables to include the timeout signal
+    if (signal := kwargs.get("timeout_signal")) is not None:
+        kwargs["environment"] = always_merger.merge(
+            kwargs.get("environment", {}),
+            {"NSHRUNNER_TIMEOUT_SIGNAL": signal.name},
+        )
+
+    # Update the environment variables to include the timeout signal
+    if (signal := kwargs.get("preempt_signal")) is not None:
+        kwargs["environment"] = always_merger.merge(
+            kwargs.get("environment", {}),
+            {"NSHRUNNER_PREEMPT_SIGNAL": signal.name},
+        )
 
     return kwargs
 

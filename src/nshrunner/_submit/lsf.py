@@ -168,11 +168,16 @@ class LSFJobKwargs(TypedDict, total=False):
     This is used to add commands like `jsrun` to the job command.
     """
 
-    signal: signal.Signals
+    timeout_signal: signal.Signals
     """
     The signal to send to the job as the "warning action".
 
     This corresponds to the "-wa" option in bsub.
+    """
+
+    preempt_signal: signal.Signals
+    """
+    The signal to send to the job when it is preempted.
     """
 
     signal_time: timedelta
@@ -197,7 +202,7 @@ DEFAULT_KWARGS: LSFJobKwargs = {
     # "rs_per_node": 1,
     # "walltime": timedelta(hours=2),
     "summit": False,
-    "signal": signal.SIGURG,
+    "timeout_signal": signal.SIGURG,
     "signal_time": timedelta(minutes=5),
 }
 
@@ -352,7 +357,7 @@ def _write_batch_script_to_file(
         if (alloc_flags := kwargs.get("alloc_flags")) is not None:
             f.write(f"#BSUB -alloc_flags {alloc_flags}\n")
 
-        if (signal := kwargs.get("signal")) is not None:
+        if (signal := kwargs.get("timeout_signal")) is not None:
             # Convert the signal.Signals enum to a string
             signal = signal.name
             # Remove the "SIG" prefix
@@ -403,10 +408,17 @@ def update_options(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
     kwargs = _update_kwargs_jsrun(kwargs, base_dir)
 
     # Update the environment variables to include the timeout signal
-    if (signal := kwargs.get("signal")) is not None:
+    if (signal := kwargs.get("timeout_signal")) is not None:
         kwargs["environment"] = always_merger.merge(
             kwargs.get("environment", {}),
             {"NSHRUNNER_TIMEOUT_SIGNAL": signal.name},
+        )
+
+    # Update the environment variables to include the timeout signal
+    if (signal := kwargs.get("preempt_signal")) is not None:
+        kwargs["environment"] = always_merger.merge(
+            kwargs.get("environment", {}),
+            {"NSHRUNNER_PREEMPT_SIGNAL": signal.name},
         )
 
     return kwargs
