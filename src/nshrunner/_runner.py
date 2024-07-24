@@ -589,9 +589,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         # Use setup commands to directly put env/pythonpath into the session bash script
         setup_commands_pre: list[str] = []
-        if merged_env := {**session.env, **options.get("environment", {})}:
-            for key, value in merged_env.items():
-                setup_commands_pre.append(f"export {key}={value}")
         if session.snapshot is not None:
             setup_commands_pre.append(
                 f"export PYTHONPATH={session.snapshot.snapshot_dir}:$PYTHONPATH"
@@ -617,7 +614,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             script_path,
             self._wrapped_run_fn,
             runs,
-            environment=session.env,
+            environment={**session.env, **options.get("environment", {})},
             setup_commands=setup_commands,
             execution={"mode": "array"},
         )

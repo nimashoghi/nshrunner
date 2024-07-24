@@ -394,7 +394,11 @@ def _write_batch_script_to_file(
     return path
 
 
-def update_options(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
+def update_options(
+    kwargs_in: LSFJobKwargs,
+    base_dir: Path,
+    job_index_variable: str = "LSB_JOBINDEX",
+) -> LSFJobKwargs:
     # Update the kwargs with the default values
     global DEFAULT_KWARGS
     kwargs = copy.deepcopy(DEFAULT_KWARGS)
@@ -425,6 +429,11 @@ def update_options(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
             {"NSHRUNNER_PREEMPT_SIGNAL": signal.name},
         )
 
+    # Update the command to set JOB_INDEX_ENV_VAR to the job index variable (if exists)
+    setup_commands = list(kwargs.get("setup_commands", []))
+    setup_commands.insert(0, f"export {JOB_INDEX_ENV_VAR}=${job_index_variable}")
+    kwargs["setup_commands"] = setup_commands
+
     return kwargs
 
 
@@ -433,7 +442,6 @@ def to_array_batch_script(
     *,
     script_path: Path,
     num_jobs: int,
-    job_index_variable: str = "LSB_JOBINDEX",
     config: LSFJobKwargs,
 ) -> SubmitOutput:
     """
@@ -441,11 +449,6 @@ def to_array_batch_script(
     """
     if not isinstance(command, str):
         command = " ".join(command)
-
-    # Update the command to set JOB_INDEX_ENV_VAR to the job index variable (if exists)
-    setup_commands = list(config.get("setup_commands", []))
-    setup_commands.insert(0, f"export {JOB_INDEX_ENV_VAR}=${job_index_variable}")
-    config["setup_commands"] = setup_commands
 
     _write_batch_script_to_file(
         script_path,

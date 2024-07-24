@@ -449,7 +449,11 @@ def _write_batch_script_to_file(
         f.write(f"{command}\n")
 
 
-def update_options(kwargs_in: SlurmJobKwargs, base_dir: Path):
+def update_options(
+    kwargs_in: SlurmJobKwargs,
+    base_dir: Path,
+    job_index_variable: str = "SLURM_ARRAY_TASK_ID",
+):
     # Update the kwargs with the default values
     kwargs = copy.deepcopy(DEFAULT_KWARGS)
 
@@ -526,6 +530,11 @@ def update_options(kwargs_in: SlurmJobKwargs, base_dir: Path):
             {"NSHRUNNER_PREEMPT_SIGNAL": signal.name},
         )
 
+    # Update the command to set JOB_INDEX_ENV_VAR to the job index variable (if exists)
+    setup_commands = list(kwargs.get("setup_commands", []))
+    setup_commands.insert(0, f"export {JOB_INDEX_ENV_VAR}=${job_index_variable}")
+    kwargs["setup_commands"] = setup_commands
+
     return kwargs
 
 
@@ -534,7 +543,6 @@ def to_array_batch_script(
     *,
     script_path: Path,
     num_jobs: int,
-    job_index_variable: str = "SLURM_ARRAY_TASK_ID",
     config: SlurmJobKwargs,
 ) -> SubmitOutput:
     """
@@ -542,11 +550,6 @@ def to_array_batch_script(
     """
     if not isinstance(command, str):
         command = " ".join(command)
-
-    # Update the command to set JOB_INDEX_ENV_VAR to the job index variable (if exists)
-    setup_commands = list(config.get("setup_commands", []))
-    setup_commands.insert(0, f"export {JOB_INDEX_ENV_VAR}=${job_index_variable}")
-    config["setup_commands"] = setup_commands
 
     _write_batch_script_to_file(
         script_path,

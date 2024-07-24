@@ -26,7 +26,19 @@ runner.submit_slurm(
         "gpus_per_task": 1,
         "cpus_per_task": 1,
     },
-    snapshot=False,
+    snapshot=True,
+)
+
+# %%
+
+runner.submit_lsf(
+    runs,
+    {
+        "queue": "learnaccel",
+        "nodes": 4,
+        "rs_per_node": 8,  # Change this to limit # of GPUs
+    },
+    snapshot=True,
 )
 
 # %%
