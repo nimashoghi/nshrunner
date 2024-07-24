@@ -25,3 +25,15 @@ pyright = "^1.1.372"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pyright]
+typeCheckingMode = "standard"
+deprecateTypingAliases = true
+strictListInference = true
+strictDictionaryInference = true
+strictSetInference = true
+reportPrivateImportUsage = false
+ignore = ["./build/"]
+
+[tool.ruff.lint]
+ignore = ["F722", "F821", "E731", "E741"]
