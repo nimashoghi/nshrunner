@@ -89,9 +89,6 @@ class Config(C.Config):
     validate_no_duplicate_ids: bool = True
     """Whether to validate that there are no duplicate IDs in the runs."""
 
-    snapshot_env_name: str = "NSHRUNNER_SNAPSHOT_PATH"
-    """The name of the environment variable to set the snapshot path to."""
-
 
 class ConfigDict(TypedDict, total=False):
     savedir: _Path
@@ -112,9 +109,6 @@ class ConfigDict(TypedDict, total=False):
 
     validate_no_duplicate_ids: bool
     """Whether to validate that there are no duplicate IDs in the runs."""
-
-    snapshot_env_name: str
-    """The name of the environment variable to set the snapshot path to."""
 
 
 def _tqdm_if_installed(iterable: Iterable[T], *args, **kwargs) -> Iterable[T]:
@@ -336,7 +330,8 @@ class Runner(Generic[Unpack[TArguments], TReturn]):
             # Update the environment to include the snapshot path
             session.env = {
                 **session.env,
-                self.config.snapshot_env_name: snapshot_path_str,
+                "NSHRUNNER_SNAPSHOT_DIR": snapshot_path_str,
+                "NSHRUNNER_SNAPSHOT_MODULES": ",".join(session.snapshot.modules),
             }
 
         return runs, session
