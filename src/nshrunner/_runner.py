@@ -193,7 +193,7 @@ def _shell_hook(env_path: Path):
         raise ValueError(f"Unable to detect the environment type for {env_path}")
 
 
-class Runner(Generic[Unpack[TArguments], TReturn]):
+class Runner(Generic[TReturn, Unpack[TArguments]]):
     def generate_id(self):
         return str(uuid.uuid4())
 
