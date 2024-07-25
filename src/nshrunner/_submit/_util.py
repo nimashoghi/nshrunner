@@ -49,7 +49,8 @@ def _write_submission_meta(
 
 
 def _set_default_envs(
-    env: Mapping[str, str] | None,
+    existing_env: Mapping[str, str] | None,
+    /,
     *,
     job_index_env_var: str,
     local_rank_env_var: str | None,
@@ -59,31 +60,31 @@ def _set_default_envs(
     timeout_signal: signal.Signals | None,
     preempt_signal: signal.Signals | None,
 ):
-    env = dict(env) if env is not None else {}
+    env: dict[str, str] = {}
 
     # Update the command to set JOB_INDEX to the job index variable (if exists)
-    env = {_env.JOB_INDEX: f"${job_index_env_var}", **env}
+    env[_env.JOB_INDEX] = f"${job_index_env_var}"
 
     # Set the local rank, global rank, and world size environment variables
     if local_rank_env_var is not None:
-        env = {_env.LOCAL_RANK: f"${local_rank_env_var}", **env}
+        env[_env.LOCAL_RANK] = f"${local_rank_env_var}"
     if global_rank_env_var is not None:
-        env = {_env.GLOBAL_RANK: f"${global_rank_env_var}", **env}
+        env[_env.GLOBAL_RANK] = f"${global_rank_env_var}"
     if world_size_env_var is not None:
-        env = {_env.WORLD_SIZE: f"${world_size_env_var}", **env}
+        env[_env.WORLD_SIZE] = f"${world_size_env_var}"
 
     # Add the current base directory to the environment variables
-    env = {_env.SUBMIT_BASE_DIR: str(base_dir.resolve().absolute()), **env}
+    env[_env.SUBMIT_BASE_DIR] = str(base_dir.resolve().absolute())
 
     # Update the environment variables to include the timeout signal
     if timeout_signal is not None:
-        env = {_env.TIMEOUT_SIGNAL: timeout_signal.name, **env}
+        env[_env.TIMEOUT_SIGNAL] = timeout_signal.name
 
     # Update the environment variables to include the preempt signal
     if preempt_signal is not None:
-        env = {_env.PREEMPT_SIGNAL: preempt_signal.name, **env}
+        env[_env.PREEMPT_SIGNAL] = preempt_signal.name
 
-    return env
+    return {**env, **(existing_env or {})}
 
 
 def _write_run_metadata_commands(

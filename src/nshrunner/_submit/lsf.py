@@ -442,9 +442,15 @@ def _write_batch_script_to_file(
                 if (x_stripped := x.strip())
             )
 
-        if (exit_script_dir := kwargs.get("_exit_script_dir")) is None:
+        if not kwargs.get("on_exit_script_support"):
             f.write(f"{command}\n")
         else:
+            if (exit_script_dir := kwargs.get("_exit_script_dir")) is None:
+                raise ValueError(
+                    "on_exit_script_support is enabled, but _exit_script_dir is not set. "
+                    "This is a logic error and should not happen."
+                )
+
             f.write(f"{command} &\n")
             f.write("wait\n")
             f.write("jswait all\n")
@@ -516,10 +522,10 @@ def update_options(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
     if kwargs.get("on_exit_script_support"):
         exit_script_dir = base_dir / "exit_scripts"
         exit_script_dir.mkdir(exist_ok=True)
-        kwargs["environment"] = always_merger.merge(
-            kwargs.get("environment", {}),
-            {_env.LSF_EXIT_SCRIPT_DIR: str(exit_script_dir.absolute())},
-        )
+        kwargs["environment"] = {
+            **kwargs.get("environment", {}),
+            _env.LSF_EXIT_SCRIPT_DIR: str(exit_script_dir.absolute()),
+        }
         kwargs["_exit_script_dir"] = exit_script_dir
 
     return kwargs

@@ -34,11 +34,10 @@ runner.submit_slurm(
 runner.submit_lsf(
     runs,
     {
+        "summit": True,
         "queue": "learnaccel",
         "nodes": 4,
         "rs_per_node": 8,  # Change this to limit # of GPUs
     },
     snapshot=True,
 )
-
-# %%
