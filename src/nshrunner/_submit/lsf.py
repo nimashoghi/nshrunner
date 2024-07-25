@@ -195,6 +195,14 @@ class LSFJobKwargs(TypedDict, total=False):
     This corresponds to the "-L" option in bsub. If specified, the job will be run using this login shell.
     """
 
+    on_exit_script_support: bool
+    """
+    Whether to support running an on-exit script outside of jsrun.
+
+    This is done by setting the environment variable `NSHRUNNER_LSF_EXIT_SCRIPT_DIR` to the path of an initially empty directory.
+    Whenever the script wants something to be done on exit, it should write a bash script to this directory.
+    """
+
     # Our own custom options
     summit: bool
     """
@@ -203,9 +211,14 @@ class LSFJobKwargs(TypedDict, total=False):
     If set to True, the job will be submitted to Summit and the default Summit options will be used.
     """
 
+    _exit_script_dir: Path
+    """
+    The directory to write the on-exit scripts to. (Internal use only)
+    """
+
 
 DEFAULT_KWARGS: LSFJobKwargs = {
-    "name": "ll",
+    "name": "nshrunner",
     # "nodes": 1,
     # "rs_per_node": 1,
     # "walltime": timedelta(hours=2),
@@ -215,6 +228,7 @@ DEFAULT_KWARGS: LSFJobKwargs = {
     # We can also ask the job manager to send a warning signal some amount of time before the allocation expires by passing -wa 'signal' and -wt '[hour:]minute' to bsub. We can then have bash create a dump_and_stop file when it receives the signal, which will tell Castro to output a checkpoint file and exit cleanly after it finishes the current timestep. An important detail that I couldn't find documented anywhere is that the job manager sends the signal to all the processes in the job, not just the submission script, and we have to use a signal that is ignored by default so Castro doesn't immediately crash upon receiving it. SIGCHLD, SIGURG, and SIGWINCH are the only signals that fit this requirement and of these, SIGURG is the least likely to be triggered by other events.
     "timeout_signal": signal.SIGURG,
     "timeout_signal_time": timedelta(minutes=5),
+    "on_exit_script_support": True,
 }
 
 
@@ -404,7 +418,33 @@ def _write_batch_script_to_file(
                 for x in (command_prefix, command)
                 if (x_stripped := x.strip())
             )
-        f.write(f"{command}\n")
+
+        if (exit_script_dir := kwargs.get("_exit_script_dir")) is None:
+            f.write(f"{command}\n")
+        else:
+            f.write(f"{command} &\n")
+            f.write("wait\n")
+            f.write("jswait all\n")
+
+            # Add the on-exit script support
+            # Basically, this just emits bash code that iterates
+            # over all files in the exit script directory and runs them
+            # in a subshell.
+            f.write("\n# Execute on-exit scripts\n")
+            f.write(f'exit_script_dir="{exit_script_dir}"\n')
+            f.write('exit_scripts=("$exit_script_dir"/*)\n')
+            f.write("num_scripts=${#exit_scripts[@]}\n")
+            f.write('echo "Found $num_scripts on-exit script(s) in $exit_script_dir"\n')
+            f.write('for script in "${exit_scripts[@]}"; do\n')
+            f.write('    if [ -f "$script" ]; then\n')
+            f.write('        echo "Executing on-exit script: $script"\n')
+            f.write('        if [ -x "$script" ]; then\n')
+            f.write('            "$script"\n')
+            f.write("        else\n")
+            f.write('            bash "$script"\n')
+            f.write("        fi\n")
+            f.write("    fi\n")
+            f.write("done\n")
 
     return path
 
@@ -445,10 +485,20 @@ def update_options(
         )
 
     # Update the command to set JOB_INDEX_ENV_VAR to the job index variable (if exists)
-    kwargs["environment"] = {
-        **kwargs.get("environment", {}),
-        JOB_INDEX_ENV_VAR: f"${job_index_variable}",
-    }
+    kwargs["environment"] = always_merger.merge(
+        kwargs.get("environment", {}),
+        {JOB_INDEX_ENV_VAR: f"${job_index_variable}"},
+    )
+
+    # If `on_exit_script_support` is enabled, set the environment variable `NSHRUNNER_LSF_EXIT_SCRIPT_DIR`
+    if kwargs.get("on_exit_script_support"):
+        exit_script_dir = base_dir / "exit_scripts"
+        exit_script_dir.mkdir(exist_ok=True)
+        kwargs["environment"] = always_merger.merge(
+            kwargs.get("environment", {}),
+            {"NSHRUNNER_LSF_EXIT_SCRIPT_DIR": str(exit_script_dir.absolute())},
+        )
+        kwargs["_exit_script_dir"] = exit_script_dir
 
     return kwargs
 

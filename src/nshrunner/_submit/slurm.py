@@ -262,7 +262,7 @@ class SlurmJobKwargs(TypedDict, total=False):
 
 
 DEFAULT_KWARGS: SlurmJobKwargs = {
-    "name": "ll",
+    "name": "nshrunner",
     # "nodes": 1,
     # "time": timedelta(hours=2),
     "timeout_signal": signal.SIGURG,
@@ -537,10 +537,10 @@ def update_options(
         )
 
     # Update the command to set JOB_INDEX_ENV_VAR to the job index variable (if exists)
-    kwargs["environment"] = {
-        **kwargs.get("environment", {}),
-        JOB_INDEX_ENV_VAR: f"${job_index_variable}",
-    }
+    kwargs["environment"] = always_merger.merge(
+        kwargs.get("environment", {}),
+        {JOB_INDEX_ENV_VAR: f"${job_index_variable}"},
+    )
 
     return kwargs
 
