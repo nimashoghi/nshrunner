@@ -67,48 +67,44 @@ def _write_run_meta(
         )
 
 
-def _write_run_metadata_commands(setup_commands: Sequence[str] | None):
+def _write_run_metadata_commands(
+    setup_commands: Sequence[str] | None,
+    is_worker_script: bool,
+):
     """
     Creates a list of bash commands that will write the run metadata
     to the submission directory. For the parent script:
     - We want to save the job id (in plain text) to a file called `job_id.txt`
     - We want to save the environment variables to a file called `env.txt`
-    - If Python exists, we'll also create a run.json file
+    - We'll also create a run.json file
     For worker scripts:
     - We create the same files, but in a /meta/workers/{rank}/ directory
     """
     setup_commands = list(setup_commands) if setup_commands is not None else []
 
-    # Determine the meta directory based on whether it's a worker script or not
-    setup_commands.append(
-        f"""
-if [ "${_env.IS_WORKER_SCRIPT}" = "1" ]; then
-    meta_dir="${_env.SUBMIT_BASE_DIR}/meta/workers/${_env.GLOBAL_RANK}"
-else
-    meta_dir="${_env.SUBMIT_BASE_DIR}/meta"
-fi
-mkdir -p "$meta_dir"
-""".strip()
-    )
+    if is_worker_script:
+        meta_dir = f"${_env.SUBMIT_BASE_DIR}/meta/workers/${{{_env.GLOBAL_RANK}}}"
+    else:
+        meta_dir = f"${_env.SUBMIT_BASE_DIR}/meta"
 
-    setup_commands.append(f'echo "${_env.JOB_INDEX}" > "$meta_dir/job_id.txt"')
-    setup_commands.append('env > "$meta_dir/env.txt"')
+    setup_commands.append(f'mkdir -p "{meta_dir}"')
+    setup_commands.append(f'echo "${{{_env.JOB_INDEX}}}" > "{meta_dir}/job_id.txt"')
+    setup_commands.append(f'env > "{meta_dir}/env.txt"')
 
-    # Add Python-based JSON writing if Python exists
-    setup_commands.append(
-        f"""
-if command -v python >/dev/null 2>&1; then
-    python -c "
-import json, os
-meta_dir = os.environ['meta_dir']
-json.dump({
-    'job_id': int(os.environ['{_env.JOB_INDEX}']),
-    'env': dict(os.environ)
-}, open(meta_dir + '/run.json', 'w'), indent=2)
-"
-fi
+    # Python-based JSON writing
+    python_code = f"""
+import json
+import os
+
+meta_dir = "{meta_dir}"
+job_id = int(os.environ["{_env.JOB_INDEX}"])
+env_vars = dict(os.environ)
+
+with open(f"{{meta_dir}}/run.json", "w") as f:
+    json.dump({{"job_id": job_id, "env": env_vars}}, f, indent=2)
 """.strip()
-    )
+
+    setup_commands.append(f'python3 -c "{python_code}"')
 
     return setup_commands
 

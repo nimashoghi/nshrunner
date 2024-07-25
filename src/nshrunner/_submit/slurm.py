@@ -555,10 +555,12 @@ def update_options(kwargs_in: SlurmJobKwargs, base_dir: Path):
     # Emit the setup commands for run metadata
     if kwargs.get("emit_metadata"):
         kwargs["setup_commands"] = _write_run_metadata_commands(
-            kwargs.get("setup_commands")
+            kwargs.get("setup_commands"),
+            is_worker_script=True,
         )
         kwargs["submission_script_setup_commands"] = _write_run_metadata_commands(
-            kwargs.get("submission_script_setup_commands")
+            kwargs.get("submission_script_setup_commands"),
+            is_worker_script=False,
         )
 
     return kwargs

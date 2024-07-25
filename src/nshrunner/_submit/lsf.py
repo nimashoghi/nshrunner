@@ -504,10 +504,12 @@ def update_options(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
     # Emit the setup commands for run metadata
     if kwargs.get("emit_metadata"):
         kwargs["setup_commands"] = _write_run_metadata_commands(
-            kwargs.get("setup_commands")
+            kwargs.get("setup_commands"),
+            is_worker_script=True,
         )
         kwargs["submission_script_setup_commands"] = _write_run_metadata_commands(
-            kwargs.get("submission_script_setup_commands")
+            kwargs.get("submission_script_setup_commands"),
+            is_worker_script=False,
         )
 
     # If `on_exit_script_support` is enabled, set the environment variable for LSF_EXIT_SCRIPT_DIR
