@@ -453,7 +453,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         command_base_dir = session.dir_path / "session"
         command_base_dir.mkdir(parents=True, exist_ok=True)
-        script_path = command_base_dir / "launch.sh"
+        script_path = command_base_dir / "session.sh"
         command = callable_to_command(
             script_path,
             self._wrapped_run_fn,
@@ -532,7 +532,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
 
-        script_path = base_dir / "launcher.sh"
+        script_path = base_dir / "worker.sh"
         command = callable_to_command(
             script_path,
             self._wrapped_run_fn,
@@ -545,7 +545,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         # Create the submission script
         submission = slurm.to_array_batch_script(
             command,
-            script_path=base_dir / "launch.sh",
+            script_path=base_dir / "submit.sh",
             num_jobs=len(runs),
             config=options,
             env=env,
@@ -555,7 +555,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         if print_command:
             log.critical("Run the following command to submit the jobs:\n\n")
             # We print the command but log the rest so the user can pipe the command to bash
-            print(f"{submission.command}\n\n")
+            print(f"{submission.command_str}\n\n")
 
         return submission
 
@@ -608,7 +608,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
 
-        script_path = base_dir / "launcher.sh"
+        script_path = base_dir / "worker.sh"
         command = callable_to_command(
             script_path,
             self._wrapped_run_fn,
@@ -621,7 +621,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         # Create the submission script
         submission = lsf.to_array_batch_script(
             command,
-            script_path=base_dir / "launch.sh",
+            script_path=base_dir / "submit.sh",
             num_jobs=len(runs),
             config=options,
             env=env,
@@ -631,6 +631,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         if print_command:
             log.critical("Run the following command to submit the jobs:\n\n")
             # We print the command but log the rest so the user can pipe the command to bash
-            print(f"{submission.command}\n\n")
+            print(f"{submission.command_str}\n\n")
 
         return submission

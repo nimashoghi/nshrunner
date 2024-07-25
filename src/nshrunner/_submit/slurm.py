@@ -11,8 +11,8 @@ from typing import Literal, cast
 from deepmerge import always_merger
 from typing_extensions import TypeAlias, TypedDict, TypeVarTuple
 
-from ..picklerunner._util import JOB_INDEX_ENV_VAR
-from ._output import SubmitOutput
+from .. import _env
+from ._util import Submission, _write_submission_meta
 
 log = logging.getLogger(__name__)
 
@@ -260,6 +260,15 @@ class SlurmJobKwargs(TypedDict, total=False):
     The flags to pass to the `srun` command.
     """
 
+    emit_metadata: bool
+    """
+    Whether to emit metadata about the job submission.
+
+    If True (default), the following metadata will be written to a JSON file:
+    - When you submit the job, the job submission information (command, script path, number of jobs, config, and environment) will be written to a file named `submission.json` in the `meta` directory.
+    - When the job starts running, the job ID and environment variables will be written to a file named `run.json` in the `meta` directory.
+    """
+
 
 DEFAULT_KWARGS: SlurmJobKwargs = {
     "name": "nshrunner",
@@ -270,6 +279,7 @@ DEFAULT_KWARGS: SlurmJobKwargs = {
     "preempt_signal": signal.SIGTERM,
     "open_mode": "append",
     # "requeue": True,
+    "emit_metadata": True,
 }
 
 
@@ -522,25 +532,31 @@ def update_options(
     # Add the command prefix to the kwargs.
     kwargs["command_prefix"] = " ".join(command_parts)
 
+    # Update the command to set JOB_INDEX to the job index variable (if exists)
+    kwargs["environment"] = always_merger.merge(
+        kwargs.get("environment", {}),
+        {_env.JOB_INDEX: f"${job_index_variable}"},
+    )
+
+    # Add the current base directory to the environment variables
+    kwargs["environment"] = always_merger.merge(
+        kwargs.get("environment", {}),
+        {_env.SUBMIT_BASE_DIR: str(base_dir.resolve().absolute())},
+    )
+
     # Update the environment variables to include the timeout signal
     if (signal := kwargs.get("timeout_signal")) is not None:
         kwargs["environment"] = always_merger.merge(
             kwargs.get("environment", {}),
-            {"NSHRUNNER_TIMEOUT_SIGNAL": signal.name},
+            {_env.TIMEOUT_SIGNAL: signal.name},
         )
 
     # Update the environment variables to include the timeout signal
     if (signal := kwargs.get("preempt_signal")) is not None:
         kwargs["environment"] = always_merger.merge(
             kwargs.get("environment", {}),
-            {"NSHRUNNER_PREEMPT_SIGNAL": signal.name},
+            {_env.PREEMPT_SIGNAL: signal.name},
         )
-
-    # Update the command to set JOB_INDEX_ENV_VAR to the job index variable (if exists)
-    kwargs["environment"] = always_merger.merge(
-        kwargs.get("environment", {}),
-        {JOB_INDEX_ENV_VAR: f"${job_index_variable}"},
-    )
 
     return kwargs
 
@@ -552,13 +568,25 @@ def to_array_batch_script(
     num_jobs: int,
     config: SlurmJobKwargs,
     env: Mapping[str, str],
-) -> SubmitOutput:
+) -> Submission:
     """
     Create the batch script for the job.
     """
     if not isinstance(command, str):
         command = " ".join(command)
 
+    # Write the submission information to a JSON file
+    if config.get("emit_metadata", True):
+        _write_submission_meta(
+            script_path.parent,
+            command=command,
+            script_path=script_path,
+            num_jobs=num_jobs,
+            config=config,
+            env=env,
+        )
+
+    # Write the batch script to the file
     _write_batch_script_to_file(
         script_path,
         config,
@@ -567,7 +595,7 @@ def to_array_batch_script(
         job_array_n_jobs=num_jobs,
     )
     script_path = script_path.resolve().absolute()
-    return SubmitOutput(
+    return Submission(
         command_parts=["sbatch", f"{script_path}"],
         script_path=script_path,
     )

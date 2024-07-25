@@ -10,8 +10,8 @@ from typing import Literal, cast
 from deepmerge import always_merger
 from typing_extensions import TypeAlias, TypedDict, TypeVarTuple
 
-from ..picklerunner._util import JOB_INDEX_ENV_VAR
-from ._output import SubmitOutput
+from .. import _env
+from ._util import Submission, _write_submission_meta
 
 log = logging.getLogger(__name__)
 
@@ -203,6 +203,15 @@ class LSFJobKwargs(TypedDict, total=False):
     Whenever the script wants something to be done on exit, it should write a bash script to this directory.
     """
 
+    emit_metadata: bool
+    """
+    Whether to emit metadata about the job submission.
+
+    If True (default), the following metadata will be written to a JSON file:
+    - When you submit the job, the job submission information (command, script path, number of jobs, config, and environment) will be written to a file named `submission.json` in the `meta` directory.
+    - When the job starts running, the job ID and environment variables will be written to a file named `run.json` in the `meta` directory.
+    """
+
     # Our own custom options
     summit: bool
     """
@@ -229,6 +238,7 @@ DEFAULT_KWARGS: LSFJobKwargs = {
     "timeout_signal": signal.SIGURG,
     "timeout_signal_time": timedelta(minutes=5),
     "on_exit_script_support": True,
+    "emit_metadata": True,
 }
 
 
@@ -453,6 +463,8 @@ def update_options(
     kwargs_in: LSFJobKwargs,
     base_dir: Path,
     job_index_variable: str = "LSB_JOBINDEX",
+    local_rank_variable: str = "JSM_NAMESPACE_LOCAL_RANK",
+    global_rank_variable: str = "JSM_NAMESPACE_GLOBAL_RANK",
 ) -> LSFJobKwargs:
     # Update the kwargs with the default values
     global DEFAULT_KWARGS
@@ -470,33 +482,38 @@ def update_options(
     # Update the kwargs to set the command prefix for jsrun
     kwargs = _update_kwargs_jsrun(kwargs, base_dir)
 
+    # Update the command to set JOB_INDEX to the job index variable (if exists)
+    kwargs["environment"] = always_merger.merge(
+        kwargs.get("environment", {}),
+        {_env.JOB_INDEX: f"${job_index_variable}"},
+    )
+
+    # Add the current base directory to the environment variables
+    kwargs["environment"] = always_merger.merge(
+        kwargs.get("environment", {}),
+        {_env.SUBMIT_BASE_DIR: str(base_dir.resolve().absolute())},
+    )
+
     # Update the environment variables to include the timeout signal
     if (signal := kwargs.get("timeout_signal")) is not None:
         kwargs["environment"] = always_merger.merge(
             kwargs.get("environment", {}),
-            {"NSHRUNNER_TIMEOUT_SIGNAL": signal.name},
+            {_env.TIMEOUT_SIGNAL: signal.name},
         )
 
     # Update the environment variables to include the timeout signal
     if (signal := kwargs.get("preempt_signal")) is not None:
         kwargs["environment"] = always_merger.merge(
             kwargs.get("environment", {}),
-            {"NSHRUNNER_PREEMPT_SIGNAL": signal.name},
+            {_env.PREEMPT_SIGNAL: signal.name},
         )
-
-    # Update the command to set JOB_INDEX_ENV_VAR to the job index variable (if exists)
-    kwargs["environment"] = always_merger.merge(
-        kwargs.get("environment", {}),
-        {JOB_INDEX_ENV_VAR: f"${job_index_variable}"},
-    )
-
-    # If `on_exit_script_support` is enabled, set the environment variable `NSHRUNNER_LSF_EXIT_SCRIPT_DIR`
+    # If `on_exit_script_support` is enabled, set the environment variable for LSF_EXIT_SCRIPT_DIR
     if kwargs.get("on_exit_script_support"):
         exit_script_dir = base_dir / "exit_scripts"
         exit_script_dir.mkdir(exist_ok=True)
         kwargs["environment"] = always_merger.merge(
             kwargs.get("environment", {}),
-            {"NSHRUNNER_LSF_EXIT_SCRIPT_DIR": str(exit_script_dir.absolute())},
+            {_env.LSF_EXIT_SCRIPT_DIR: str(exit_script_dir.absolute())},
         )
         kwargs["_exit_script_dir"] = exit_script_dir
 
@@ -510,13 +527,25 @@ def to_array_batch_script(
     num_jobs: int,
     config: LSFJobKwargs,
     env: Mapping[str, str],
-) -> SubmitOutput:
+) -> Submission:
     """
     Create the batch script for the job.
     """
     if not isinstance(command, str):
         command = " ".join(command)
 
+    # Write the submission information to a JSON file
+    if config.get("emit_metadata", True):
+        _write_submission_meta(
+            script_path.parent,
+            command=command,
+            script_path=script_path,
+            num_jobs=num_jobs,
+            config=config,
+            env=env,
+        )
+
+    # Write the batch script to the file
     _write_batch_script_to_file(
         script_path,
         config,
@@ -525,7 +554,7 @@ def to_array_batch_script(
         job_array_n_jobs=num_jobs,
     )
     script_path = script_path.resolve().absolute()
-    return SubmitOutput(
+    return Submission(
         command_parts=["bsub", str(script_path)],
         script_path=script_path,
     )
