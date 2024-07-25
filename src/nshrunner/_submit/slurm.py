@@ -11,8 +11,7 @@ from typing import Literal, cast
 from deepmerge import always_merger
 from typing_extensions import TypeAlias, TypedDict, TypeVarTuple
 
-from .. import _env
-from ._util import Submission, _write_submission_meta
+from ._util import Submission, _set_default_envs, _write_submission_meta
 
 log = logging.getLogger(__name__)
 
@@ -465,11 +464,7 @@ def _write_batch_script_to_file(
         f.write(f"{command}\n")
 
 
-def update_options(
-    kwargs_in: SlurmJobKwargs,
-    base_dir: Path,
-    job_index_variable: str = "SLURM_ARRAY_TASK_ID",
-):
+def update_options(kwargs_in: SlurmJobKwargs, base_dir: Path):
     # Update the kwargs with the default values
     kwargs = copy.deepcopy(DEFAULT_KWARGS)
 
@@ -532,31 +527,17 @@ def update_options(
     # Add the command prefix to the kwargs.
     kwargs["command_prefix"] = " ".join(command_parts)
 
-    # Update the command to set JOB_INDEX to the job index variable (if exists)
-    kwargs["environment"] = always_merger.merge(
-        kwargs.get("environment", {}),
-        {_env.JOB_INDEX: f"${job_index_variable}"},
+    # Set the default environment variables
+    kwargs["environment"] = _set_default_envs(
+        kwargs.get("environment"),
+        job_index_env_var="SLURM_ARRAY_TASK_ID",
+        local_rank_env_var="SLURM_LOCALID",
+        global_rank_env_var="SLURM_PROCID",
+        world_size_env_var="SLURM_NTASKS",
+        base_dir=base_dir,
+        timeout_signal=kwargs.get("timeout_signal"),
+        preempt_signal=kwargs.get("preempt_signal"),
     )
-
-    # Add the current base directory to the environment variables
-    kwargs["environment"] = always_merger.merge(
-        kwargs.get("environment", {}),
-        {_env.SUBMIT_BASE_DIR: str(base_dir.resolve().absolute())},
-    )
-
-    # Update the environment variables to include the timeout signal
-    if (signal := kwargs.get("timeout_signal")) is not None:
-        kwargs["environment"] = always_merger.merge(
-            kwargs.get("environment", {}),
-            {_env.TIMEOUT_SIGNAL: signal.name},
-        )
-
-    # Update the environment variables to include the timeout signal
-    if (signal := kwargs.get("preempt_signal")) is not None:
-        kwargs["environment"] = always_merger.merge(
-            kwargs.get("environment", {}),
-            {_env.PREEMPT_SIGNAL: signal.name},
-        )
 
     return kwargs
 

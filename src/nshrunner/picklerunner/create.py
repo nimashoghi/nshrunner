@@ -303,7 +303,7 @@ def callable_to_command(
     _write_helper_script(
         script_path,
         command_inner,
-        environment,
+        {_env.IS_WORKER_SCRIPT: "1", **environment},
         setup_commands,
         prepend_command_with_exec=True,
     )

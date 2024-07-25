@@ -11,7 +11,7 @@ from deepmerge import always_merger
 from typing_extensions import TypeAlias, TypedDict, TypeVarTuple
 
 from .. import _env
-from ._util import Submission, _write_submission_meta
+from ._util import Submission, _set_default_envs, _write_submission_meta
 
 log = logging.getLogger(__name__)
 
@@ -459,13 +459,7 @@ def _write_batch_script_to_file(
     return path
 
 
-def update_options(
-    kwargs_in: LSFJobKwargs,
-    base_dir: Path,
-    job_index_variable: str = "LSB_JOBINDEX",
-    local_rank_variable: str = "JSM_NAMESPACE_LOCAL_RANK",
-    global_rank_variable: str = "JSM_NAMESPACE_GLOBAL_RANK",
-) -> LSFJobKwargs:
+def update_options(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
     # Update the kwargs with the default values
     global DEFAULT_KWARGS
     kwargs = copy.deepcopy(DEFAULT_KWARGS)
@@ -482,31 +476,18 @@ def update_options(
     # Update the kwargs to set the command prefix for jsrun
     kwargs = _update_kwargs_jsrun(kwargs, base_dir)
 
-    # Update the command to set JOB_INDEX to the job index variable (if exists)
-    kwargs["environment"] = always_merger.merge(
-        kwargs.get("environment", {}),
-        {_env.JOB_INDEX: f"${job_index_variable}"},
+    # Set the default environment variables
+    kwargs["environment"] = _set_default_envs(
+        kwargs.get("environment"),
+        job_index_env_var="LSB_JOBINDEX",
+        local_rank_env_var="JSM_NAMESPACE_LOCAL_RANK",
+        global_rank_env_var="JSM_NAMESPACE_GLOBAL_RANK",
+        world_size_env_var="JSM_NAMESPACE_GLOBAL_SIZE",
+        base_dir=base_dir,
+        timeout_signal=kwargs.get("timeout_signal"),
+        preempt_signal=kwargs.get("preempt_signal"),
     )
 
-    # Add the current base directory to the environment variables
-    kwargs["environment"] = always_merger.merge(
-        kwargs.get("environment", {}),
-        {_env.SUBMIT_BASE_DIR: str(base_dir.resolve().absolute())},
-    )
-
-    # Update the environment variables to include the timeout signal
-    if (signal := kwargs.get("timeout_signal")) is not None:
-        kwargs["environment"] = always_merger.merge(
-            kwargs.get("environment", {}),
-            {_env.TIMEOUT_SIGNAL: signal.name},
-        )
-
-    # Update the environment variables to include the timeout signal
-    if (signal := kwargs.get("preempt_signal")) is not None:
-        kwargs["environment"] = always_merger.merge(
-            kwargs.get("environment", {}),
-            {_env.PREEMPT_SIGNAL: signal.name},
-        )
     # If `on_exit_script_support` is enabled, set the environment variable for LSF_EXIT_SCRIPT_DIR
     if kwargs.get("on_exit_script_support"):
         exit_script_dir = base_dir / "exit_scripts"
