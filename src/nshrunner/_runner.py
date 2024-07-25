@@ -322,9 +322,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         return runs
 
-    def _resolve_env(self, env: Mapping[str, str] | None):
-        return {**(self.config.env or {}), **(env or {})}
-
     def _setup_session(
         self,
         runs: Iterable[tuple[Unpack[TArguments]]],
@@ -348,7 +345,13 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         session = Session(id=id, dir_path=session_dir)
 
         # Resolve the environment
-        session.env = self._resolve_env(env)
+        session.env = {
+            _env.SESSION_ID: id,
+            _env.SESSION_DIR: str(session.dir_path.resolve().absolute()),
+            **session.env,
+            **(self.config.env or {}),
+            **(env or {}),
+        }
 
         # Take a snapshot of the environment if needed
         if (
@@ -358,16 +361,13 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         ) is not None:
             session.snapshot = snapshot_modules(snapshot_config)
             snapshot_path_str = str(session.snapshot.snapshot_dir.absolute())
-            # Update the environment to include the snapshot path
-            session.env = {
-                **session.env,
-                _env.SNAPSHOT_DIR: snapshot_path_str,
-                _env.SNAPSHOT_MODULES: ",".join(session.snapshot.modules),
-            }
-            # Prepend the PYTHONPATH to the env dict
+            # Update the environment to include the snapshot path and
+            # prepend the new PYTHONPATH to the env dict.
             session.env = {
                 "PYTHONPATH": f"{snapshot_path_str}:$PYTHONPATH",
                 **session.env,
+                _env.SNAPSHOT_DIR: snapshot_path_str,
+                _env.SNAPSHOT_MODULES: ",".join(session.snapshot.modules),
             }
 
         return runs, session
