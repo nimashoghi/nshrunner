@@ -477,7 +477,9 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         # Print the full command so the user can copy-paste it
         if print_command:
-            print(f"Run the following command to launch the session:\n\n{command}")
+            log.critical("Run the following command to launch the session:\n\n")
+            # We print the command but log the rest so the user can pipe the command to bash
+            print(f"{command}\n\n")
 
         return command
 
@@ -552,9 +554,9 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         # Print the full command so the user can copy-paste it
         if print_command:
-            print(
-                f"Please run the following command to submit the jobs:\n\n{submission.command}"
-            )
+            log.critical("Run the following command to submit the jobs:\n\n")
+            # We print the command but log the rest so the user can pipe the command to bash
+            print(f"{submission.command}\n\n")
 
         return submission
 
@@ -629,8 +631,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         # Print the full command so the user can copy-paste it
         if print_command:
-            print(
-                f"Please run the following command to submit the jobs:\n\n{submission.command}"
-            )
+            log.critical("Run the following command to submit the jobs:\n\n")
+            # We print the command but log the rest so the user can pipe the command to bash
+            print(f"{submission.command}\n\n")
 
         return submission

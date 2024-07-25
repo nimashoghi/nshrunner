@@ -215,9 +215,6 @@ DEFAULT_KWARGS: LSFJobKwargs = {
     # We can also ask the job manager to send a warning signal some amount of time before the allocation expires by passing -wa 'signal' and -wt '[hour:]minute' to bsub. We can then have bash create a dump_and_stop file when it receives the signal, which will tell Castro to output a checkpoint file and exit cleanly after it finishes the current timestep. An important detail that I couldn't find documented anywhere is that the job manager sends the signal to all the processes in the job, not just the submission script, and we have to use a signal that is ignored by default so Castro doesn't immediately crash upon receiving it. SIGCHLD, SIGURG, and SIGWINCH are the only signals that fit this requirement and of these, SIGURG is the least likely to be triggered by other events.
     "timeout_signal": signal.SIGURG,
     "timeout_signal_time": timedelta(minutes=5),
-    # It's important to set the login shell to bash, as the default is /bin/sh, which doesn't support a lot of the bash features we use.
-    # Most importantly, `brequeue` doesn't work with /bin/sh, which breaks the job re-queueing.
-    "login_shell": "/bin/bash",
 }
 
 
