@@ -1,6 +1,6 @@
 import json
 import signal
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -67,13 +67,7 @@ def _write_run_meta(
         )
 
 
-def _emit_write_run_metadata_commands(
-    *,
-    submit_dir_env_var: str = _env.SUBMIT_BASE_DIR,
-    job_id_env_var: str = _env.JOB_INDEX,
-    global_rank_env_var: str = _env.GLOBAL_RANK,
-    is_worker_env_var: str = _env.IS_WORKER_SCRIPT,
-) -> list[str]:
+def _write_run_metadata_commands(setup_commands: Sequence[str] | None):
     """
     Creates a list of bash commands that will write the run metadata
     to the submission directory. For the parent script:
@@ -83,21 +77,21 @@ def _emit_write_run_metadata_commands(
     For worker scripts:
     - We create the same files, but in a /meta/workers/{rank}/ directory
     """
-    setup_commands = []
+    setup_commands = list(setup_commands) if setup_commands is not None else []
 
     # Determine the meta directory based on whether it's a worker script or not
     setup_commands.append(
         f"""
-if [ "${is_worker_env_var}" = "1" ]; then
-    meta_dir="${submit_dir_env_var}/meta/workers/${global_rank_env_var}"
+if [ "${_env.IS_WORKER_SCRIPT}" = "1" ]; then
+    meta_dir="${_env.SUBMIT_BASE_DIR}/meta/workers/${_env.GLOBAL_RANK}"
 else
-    meta_dir="${submit_dir_env_var}/meta"
+    meta_dir="${_env.SUBMIT_BASE_DIR}/meta"
 fi
 mkdir -p "$meta_dir"
 """.strip()
     )
 
-    setup_commands.append(f'echo "${job_id_env_var}" > "$meta_dir/job_id.txt"')
+    setup_commands.append(f'echo "${_env.JOB_INDEX}" > "$meta_dir/job_id.txt"')
     setup_commands.append('env > "$meta_dir/env.txt"')
 
     # Add Python-based JSON writing if Python exists
@@ -108,7 +102,7 @@ if command -v python >/dev/null 2>&1; then
 import json, os
 meta_dir = os.environ['meta_dir']
 json.dump({
-    'job_id': int(os.environ['{job_id_env_var}']),
+    'job_id': int(os.environ['{_env.JOB_INDEX}']),
     'env': dict(os.environ)
 }, open(meta_dir + '/run.json', 'w'), indent=2)
 "

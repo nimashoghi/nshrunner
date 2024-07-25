@@ -11,7 +11,12 @@ from deepmerge import always_merger
 from typing_extensions import TypeAlias, TypedDict, TypeVarTuple
 
 from .. import _env
-from ._util import Submission, _set_default_envs, _write_submission_meta
+from ._util import (
+    Submission,
+    _set_default_envs,
+    _write_run_metadata_commands,
+    _write_submission_meta,
+)
 
 log = logging.getLogger(__name__)
 
@@ -112,6 +117,14 @@ class LSFJobKwargs(TypedDict, total=False):
     The setup commands to run before the job.
 
     These commands will be executed prior to everything else in the job script.
+    They will be included in both the worker script (the one that runs inside of srun/jsrun)
+    and not the submission script (the one that is submitted to the job scheduler).
+    """
+
+    submission_script_setup_commands: Sequence[str]
+    """
+    Same as `setup_commands`, but only for the submission script (and not
+    the worker scripts executed by srun/jsrun).
     """
 
     environment: Mapping[str, str]
@@ -488,6 +501,15 @@ def update_options(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
         preempt_signal=kwargs.get("preempt_signal"),
     )
 
+    # Emit the setup commands for run metadata
+    if kwargs.get("emit_metadata"):
+        kwargs["setup_commands"] = _write_run_metadata_commands(
+            kwargs.get("setup_commands")
+        )
+        kwargs["submission_script_setup_commands"] = _write_run_metadata_commands(
+            kwargs.get("submission_script_setup_commands")
+        )
+
     # If `on_exit_script_support` is enabled, set the environment variable for LSF_EXIT_SCRIPT_DIR
     if kwargs.get("on_exit_script_support"):
         exit_script_dir = base_dir / "exit_scripts"
@@ -516,7 +538,7 @@ def to_array_batch_script(
         command = " ".join(command)
 
     # Write the submission information to a JSON file
-    if config.get("emit_metadata", True):
+    if config.get("emit_metadata"):
         _write_submission_meta(
             script_path.parent,
             command=command,
