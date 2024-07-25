@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nshrunner"
-version = "0.9.2"
+version = "0.9.3"
 description = ""
 authors = ["Nima Shoghi <nimashoghi@gmail.com>"]
 readme = "README.md"
@@ -35,7 +35,6 @@ strictListInference = true
 strictDictionaryInference = true
 strictSetInference = true
 reportPrivateImportUsage = false
-ignore = ["./build/"]
 
 [tool.ruff.lint]
 ignore = ["F722", "F821", "E731", "E741"]

@@ -40,5 +40,3 @@ runner.submit_lsf(
     },
     snapshot=True,
 )
-
-# %%
