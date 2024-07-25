@@ -15,6 +15,7 @@ from typing import Generic, TypeAlias, cast
 import nshconfig as C
 from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack
 
+from . import _env
 from ._logging import PythonLoggingConfig, init_python_logging
 from ._seed import SeedConfig
 from ._submit import lsf, slurm
@@ -359,8 +360,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             # Update the environment to include the snapshot path
             session.env = {
                 **session.env,
-                "NSHRUNNER_SNAPSHOT_DIR": snapshot_path_str,
-                "NSHRUNNER_SNAPSHOT_MODULES": ",".join(session.snapshot.modules),
+                _env.SNAPSHOT_DIR: snapshot_path_str,
+                _env.SNAPSHOT_MODULES: ",".join(session.snapshot.modules),
             }
             # Prepend the PYTHONPATH to the env dict
             session.env = {
