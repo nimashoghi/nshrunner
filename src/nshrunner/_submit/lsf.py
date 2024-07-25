@@ -289,6 +289,7 @@ def _write_batch_script_to_file(
     path: Path,
     kwargs: LSFJobKwargs,
     command: str,
+    env: Mapping[str, str] = {},
     job_array_n_jobs: int | None = None,
 ):
     logs_base = path.parent / "logs"
@@ -391,7 +392,11 @@ def _write_batch_script_to_file(
             f.write(f"#BSUB -wt {signal_time}\n")
 
         f.write("\n")
-        f.write("\n")
+
+        if env:
+            for key, value in env.items():
+                f.write(f"export {key}={value}\n")
+            f.write("\n")
 
         if (command_prefix := kwargs.get("command_prefix")) is not None:
             command = " ".join(
@@ -440,9 +445,10 @@ def update_options(
         )
 
     # Update the command to set JOB_INDEX_ENV_VAR to the job index variable (if exists)
-    setup_commands = list(kwargs.get("setup_commands", []))
-    setup_commands.insert(0, f"export {JOB_INDEX_ENV_VAR}=${job_index_variable}")
-    kwargs["setup_commands"] = setup_commands
+    kwargs["environment"] = {
+        **kwargs.get("environment", {}),
+        JOB_INDEX_ENV_VAR: f"${job_index_variable}",
+    }
 
     return kwargs
 
@@ -453,6 +459,7 @@ def to_array_batch_script(
     script_path: Path,
     num_jobs: int,
     config: LSFJobKwargs,
+    env: Mapping[str, str],
 ) -> SubmitOutput:
     """
     Create the batch script for the job.
@@ -464,6 +471,7 @@ def to_array_batch_script(
         script_path,
         config,
         command,
+        env=env,
         job_array_n_jobs=num_jobs,
     )
     script_path = script_path.resolve().absolute()

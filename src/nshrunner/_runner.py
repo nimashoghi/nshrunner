@@ -362,6 +362,10 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
                 "NSHRUNNER_SNAPSHOT_DIR": snapshot_path_str,
                 "NSHRUNNER_SNAPSHOT_MODULES": ",".join(session.snapshot.modules),
             }
+            # Prepend the PYTHONPATH to the env dict
+            session.env = {
+                "PYTHONPATH": f"{snapshot_path_str}:$PYTHONPATH"
+            } | session.env
 
         return runs, session
 
@@ -435,10 +439,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         if session.env:
             for key, value in session.env.items():
                 setup_commands_pre.append(f"export {key}={value}")
-        if session.snapshot is not None:
-            setup_commands_pre.append(
-                f"export PYTHONPATH={session.snapshot.snapshot_dir}:$PYTHONPATH"
-            )
 
         if activate_venv:
             setup_commands_pre.append("echo 'Activating environment'")
@@ -514,11 +514,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         # Use setup commands to directly put env/pythonpath into the session bash script
         setup_commands_pre: list[str] = []
-        if session.snapshot is not None:
-            setup_commands_pre.append(
-                f"export PYTHONPATH={session.snapshot.snapshot_dir}:$PYTHONPATH"
-            )
-
         if activate_venv:
             setup_commands_pre.append("echo 'Activating environment'")
             setup_commands_pre.append(_shell_hook(Path(sys.prefix)))
@@ -531,6 +526,9 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         )
         del setup_commands_pre
 
+        # Merge the environment
+        env = {**session.env, **options.get("environment", {})}
+
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
 
@@ -539,7 +537,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             script_path,
             self._wrapped_run_fn,
             runs,
-            environment={**session.env, **options.get("environment", {})},
+            environment=env,
             setup_commands=setup_commands,
             execution={"mode": "array"},
         )
@@ -550,6 +548,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             script_path=base_dir / "launch.sh",
             num_jobs=len(runs),
             config=options,
+            env=env,
         )
 
         # Print the full command so the user can copy-paste it
@@ -591,11 +590,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         # Use setup commands to directly put env/pythonpath into the session bash script
         setup_commands_pre: list[str] = []
-        if session.snapshot is not None:
-            setup_commands_pre.append(
-                f"export PYTHONPATH={session.snapshot.snapshot_dir}:$PYTHONPATH"
-            )
-
         if activate_venv:
             setup_commands_pre.append("echo 'Activating environment'")
             setup_commands_pre.append(_shell_hook(Path(sys.prefix)))
@@ -607,6 +601,9 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             + list(options.get("setup_commands", []))
         )
         del setup_commands_pre
+
+        # Merge the environment
+        env = {**session.env, **options.get("environment", {})}
 
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
@@ -627,6 +624,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             script_path=base_dir / "launch.sh",
             num_jobs=len(runs),
             config=options,
+            env=env,
         )
 
         # Print the full command so the user can copy-paste it
