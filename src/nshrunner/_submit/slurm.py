@@ -543,10 +543,10 @@ def update_options(kwargs_in: SlurmJobKwargs, base_dir: Path):
     # Set the default environment variables
     kwargs["environment"] = _set_default_envs(
         kwargs.get("environment"),
-        job_index_env_var="SLURM_ARRAY_TASK_ID",
-        local_rank_env_var="SLURM_LOCALID",
-        global_rank_env_var="SLURM_PROCID",
-        world_size_env_var="SLURM_NTASKS",
+        job_index="$SLURM_ARRAY_TASK_ID",
+        local_rank="$SLURM_LOCALID",
+        global_rank="$SLURM_PROCID",
+        world_size="$SLURM_NTASKS",
         base_dir=base_dir,
         timeout_signal=kwargs.get("timeout_signal"),
         preempt_signal=kwargs.get("preempt_signal"),

@@ -79,7 +79,7 @@ class SerializedMultiFunction(PathLike):
 
     def to_bash_command(
         self,
-        job_index_variable: str = _env.JOB_INDEX,
+        job_index_variable: str = _env.SUBMIT_JOB_INDEX,
         python_executable: str | None = None,
         environment: Mapping[str, str] | None = None,
         print_environment_info: bool = False,

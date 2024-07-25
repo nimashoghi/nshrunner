@@ -52,10 +52,10 @@ def _set_default_envs(
     existing_env: Mapping[str, str] | None,
     /,
     *,
-    job_index_env_var: str,
-    local_rank_env_var: str | None,
-    global_rank_env_var: str | None,
-    world_size_env_var: str | None,
+    job_index: str | None,
+    local_rank: str,
+    global_rank: str,
+    world_size: str,
     base_dir: Path,
     timeout_signal: signal.Signals | None,
     preempt_signal: signal.Signals | None,
@@ -63,34 +63,34 @@ def _set_default_envs(
     env: dict[str, str] = {}
 
     # Update the command to set JOB_INDEX to the job index variable (if exists)
-    env[_env.JOB_INDEX] = f"${job_index_env_var}"
+    env[_env.SUBMIT_JOB_INDEX] = str(job_index) if job_index is not None else ""
 
     # Set the local rank, global rank, and world size environment variables
-    if local_rank_env_var is not None:
-        env[_env.LOCAL_RANK] = f"${local_rank_env_var}"
-    if global_rank_env_var is not None:
-        env[_env.GLOBAL_RANK] = f"${global_rank_env_var}"
-    if world_size_env_var is not None:
-        env[_env.WORLD_SIZE] = f"${world_size_env_var}"
+    env[_env.SUBMIT_LOCAL_RANK] = str(local_rank)
+    env[_env.SUBMIT_GLOBAL_RANK] = str(global_rank)
+    env[_env.SUBMIT_WORLD_SIZE] = str(world_size)
 
     # Add the current base directory to the environment variables
     env[_env.SUBMIT_BASE_DIR] = str(base_dir.resolve().absolute())
 
     # Update the environment variables to include the timeout signal
-    if timeout_signal is not None:
-        env[_env.TIMEOUT_SIGNAL] = timeout_signal.name
+    env[_env.SUBMIT_TIMEOUT_SIGNAL] = (
+        timeout_signal.name if timeout_signal is not None else ""
+    )
 
     # Update the environment variables to include the preempt signal
-    if preempt_signal is not None:
-        env[_env.PREEMPT_SIGNAL] = preempt_signal.name
+    env[_env.SUBMITPREEMPT_SIGNAL] = (
+        preempt_signal.name if preempt_signal is not None else ""
+    )
 
     return {**env, **(existing_env or {})}
 
 
 def _write_run_metadata_commands(
     setup_commands: Sequence[str] | None,
-    is_worker_script: bool,
-):
+    *,
+    is_worker_script: bool = False,
+) -> list[str]:
     """
     Creates a list of bash commands that will write the run metadata
     to the submission directory. For the parent script:
@@ -102,13 +102,23 @@ def _write_run_metadata_commands(
     """
     setup_commands = list(setup_commands) if setup_commands is not None else []
 
+    setup_commands.append("")
+    setup_commands.append("")
+    comment = "# Run metadata"
+    comment += " (worker)" if is_worker_script else " (parent)"
+    setup_commands.append(comment)
+
     if is_worker_script:
-        meta_dir = f"${_env.SUBMIT_BASE_DIR}/meta/workers/${{{_env.GLOBAL_RANK}}}"
+        meta_dir = (
+            f"${_env.SUBMIT_BASE_DIR}/meta/workers/${{{_env.SUBMIT_GLOBAL_RANK}}}"
+        )
     else:
-        meta_dir = f"${_env.SUBMIT_BASE_DIR}/meta"
+        meta_dir = f"${_env.SUBMIT_BASE_DIR}/meta/parent"
 
     setup_commands.append(f'mkdir -p "{meta_dir}"')
-    setup_commands.append(f'echo "${{{_env.JOB_INDEX}}}" > "{meta_dir}/job_id.txt"')
+    setup_commands.append(
+        f'echo "${{{_env.SUBMIT_JOB_INDEX}}}" > "{meta_dir}/job_id.txt"'
+    )
     setup_commands.append(f'env > "{meta_dir}/env.txt"')
 
     # Python-based JSON writing
@@ -116,14 +126,23 @@ def _write_run_metadata_commands(
 import json
 import os
 
-meta_dir = "{meta_dir}"
-job_id = int(os.environ["{_env.JOB_INDEX}"])
+meta_dir = os.environ['{_env.SUBMIT_BASE_DIR}']
+if {is_worker_script}:
+    meta_dir = os.path.join(meta_dir, 'meta', 'workers', os.environ['{_env.SUBMIT_GLOBAL_RANK}'])
+else:
+    meta_dir = os.path.join(meta_dir, 'meta')
+
+job_id = os.environ['{_env.SUBMIT_JOB_INDEX}']
 env_vars = dict(os.environ)
 
-with open(f"{{meta_dir}}/run.json", "w") as f:
-    json.dump({{"job_id": job_id, "env": env_vars}}, f, indent=2)
+with open(os.path.join(meta_dir, 'run.json'), 'w') as f:
+    json.dump({{'job_id': job_id, 'env': env_vars}}, f, indent=2)
 """.strip()
 
-    setup_commands.append(f'python3 -c "{python_code}"')
+    setup_commands.append(f'python -c "{python_code}"')
+
+    setup_commands.append(comment.replace("# R", "# End r", 1))
+    setup_commands.append("")
+    setup_commands.append("")
 
     return setup_commands

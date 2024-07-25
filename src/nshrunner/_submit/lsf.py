@@ -498,10 +498,10 @@ def update_options(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
     # Set the default environment variables
     kwargs["environment"] = _set_default_envs(
         kwargs.get("environment"),
-        job_index_env_var="LSB_JOBINDEX",
-        local_rank_env_var="JSM_NAMESPACE_LOCAL_RANK",
-        global_rank_env_var="JSM_NAMESPACE_GLOBAL_RANK",
-        world_size_env_var="JSM_NAMESPACE_GLOBAL_SIZE",
+        job_index="$LSB_JOBINDEX",
+        local_rank="$JSM_NAMESPACE_LOCAL_RANK",
+        global_rank="$JSM_NAMESPACE_GLOBAL_RANK",
+        world_size="$JSM_NAMESPACE_GLOBAL_SIZE",
         base_dir=base_dir,
         timeout_signal=kwargs.get("timeout_signal"),
         preempt_signal=kwargs.get("preempt_signal"),

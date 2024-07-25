@@ -19,6 +19,7 @@ from . import _env
 from ._logging import PythonLoggingConfig, init_python_logging
 from ._seed import SeedConfig
 from ._submit import lsf, slurm
+from ._submit._util import _set_default_envs, _write_run_metadata_commands
 from ._util.env import _with_env, _with_pythonpath_prepend
 from ._util.environment import (
     remove_lsf_environment_variables,
@@ -365,8 +366,9 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             }
             # Prepend the PYTHONPATH to the env dict
             session.env = {
-                "PYTHONPATH": f"{snapshot_path_str}:$PYTHONPATH"
-            } | session.env
+                "PYTHONPATH": f"{snapshot_path_str}:$PYTHONPATH",
+                **session.env,
+            }
 
         return runs, session
 
@@ -423,6 +425,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         attach: bool = True,
         print_command: bool = True,
         pause_before_exit: bool = False,
+        emit_metadata: bool = True,
     ):
         # Make sure the `session` utility is installed
         _ensure_supports_session()
@@ -435,12 +438,28 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             transforms=transforms or [],
         )
 
-        # Use setup commands to directly put env/pythonpath into the session bash script
-        setup_commands_pre: list[str] = []
-        if session.env:
-            for key, value in session.env.items():
-                setup_commands_pre.append(f"export {key}={value}")
+        # Resolve env
+        env = _set_default_envs(
+            session.env,
+            job_index=None,
+            local_rank="0",
+            global_rank="0",
+            world_size="1",
+            base_dir=session.dir_path,
+            timeout_signal=None,
+            preempt_signal=None,
+        )
+        # Emit the setup commands to write the metadata
+        if emit_metadata:
+            setup_commands = _write_run_metadata_commands(
+                setup_commands, is_worker_script=False
+            )
+            setup_commands = _write_run_metadata_commands(
+                setup_commands, is_worker_script=True
+            )
 
+        # Use setup commands to directly put pythonpath into the session bash script
+        setup_commands_pre: list[str] = []
         if activate_venv:
             setup_commands_pre.append("echo 'Activating environment'")
             setup_commands_pre.append(_shell_hook(Path(sys.prefix)))
@@ -459,7 +478,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             script_path,
             self._wrapped_run_fn,
             runs,
-            environment=session.env,
+            environment=env,
             setup_commands=setup_commands,
             execution={
                 "mode": "sequential",
