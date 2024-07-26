@@ -9,7 +9,7 @@ from typing_extensions import assert_never
 log = logging.getLogger(__name__)
 
 
-def add_snapshot_to_python_path(
+def load_existing_snapshot(
     snapshot_dir: Path,
     *,
     on_error: Literal["warn", "raise"] = "raise",

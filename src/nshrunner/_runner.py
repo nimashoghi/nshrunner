@@ -88,27 +88,6 @@ class RunnerConfig(C.Config):
     """Whether to validate that there are no duplicate IDs in the runs."""
 
 
-class ConfigDict(TypedDict, total=False):
-    savedir: _Path
-    """
-    The `savedir` parameter is a string that represents the directory where the program will save its execution files and logs.
-        This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
-        If `None`, this will default to the current working directory / `llrunner`.
-    """
-
-    python_logging: PythonLoggingConfig
-    """Logging configuration for the runner."""
-
-    seed: SeedConfig
-    """Seed configuration for the runner."""
-
-    env: Mapping[str, str]
-    """Environment variables to set for the session."""
-
-    validate_no_duplicate_ids: bool
-    """Whether to validate that there are no duplicate IDs in the runs."""
-
-
 T = TypeVar("T", infer_variance=True)
 
 
@@ -125,18 +104,13 @@ def _wrap_run_fn(
     config: RunnerConfig,
     run_fn: Callable[[Unpack[TArguments]], TReturn],
     info_fn: Callable[[Unpack[TArguments]], RunInfo],
-    validate_fns: Iterable[
-        Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]
-    ],
+    validate_fns: Iterable[Callable[[Unpack[TArguments]], None]],
 ):
     @functools.wraps(run_fn)
     def wrapped_run_fn(*args: Unpack[TArguments]) -> TReturn:
         # Validate the configuration
         for validate_fn in validate_fns:
-            if (validate_out := validate_fn(*args)) is None:
-                continue
-
-            args = validate_out
+            validate_fn(*args)
 
         # Get the run info
         run_info = info_fn(*args)
@@ -146,9 +120,8 @@ def _wrap_run_fn(
             init_python_logging(config.python_logging)
 
         # Set additional environment variables
-        env = {**(config.env or {}), **run_info.get("env", {})}
         with contextlib.ExitStack() as stack:
-            stack.enter_context(_with_env(env))
+            stack.enter_context(_with_env(run_info.get("env", {})))
             return run_fn(*args)
 
     return wrapped_run_fn
@@ -186,8 +159,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         config: RunnerConfig = RunnerConfig(),
         *,
         info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
-        validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]
-        | None = None,
+        validate_fn: Callable[[Unpack[TArguments]], None] | None = None,
         transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
         | None = None,
     ):
@@ -220,7 +192,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         return args
 
     @cached_property
-    def _wrapped_run_fn(self):
+    def _wrapped_run_fn(self) -> Callable[[Unpack[TArguments]], TReturn]:
         return _wrap_run_fn(
             self.config,
             self.run_fn,
