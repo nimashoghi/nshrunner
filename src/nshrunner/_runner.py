@@ -126,28 +126,30 @@ def _wrap_run_fn(
     config: Config,
     run_fn: Callable[[Unpack[TArguments]], TReturn],
     info_fn: Callable[[Unpack[TArguments]], RunInfo],
-    validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None],
+    validate_fns: Iterable[
+        Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]
+    ],
 ):
     @functools.wraps(run_fn)
     def wrapped_run_fn(*args: Unpack[TArguments]) -> TReturn:
+        # Validate the configuration
+        for validate_fn in validate_fns:
+            if (validate_out := validate_fn(*args)) is None:
+                continue
+
+            args = validate_out
+
+        # Get the run info
+        run_info = info_fn(*args)
+
+        # Set up Python logging
+        if not run_info.get("skip_python_logging", False):
+            init_python_logging(config.python_logging)
+
+        # Set additional environment variables
+        env = {**(config.env or {}), **run_info.get("env", {})}
         with contextlib.ExitStack() as stack:
-            # Validate the configuration
-            if (validate_out := validate_fn(*args)) is not None and isinstance(
-                validate_out, tuple
-            ):
-                args = validate_out
-
-            # Get the run info
-            run_info = info_fn(*args)
-
-            # Set up Python logging
-            if not run_info.get("skip_python_logging", False):
-                init_python_logging(config.python_logging)
-
-            # Set additional environment variables
-            env = {**(config.env or {}), **run_info.get("env", {})}
             stack.enter_context(_with_env(env))
-
             return run_fn(*args)
 
     return wrapped_run_fn
@@ -260,7 +262,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             self.config,
             self.run_fn,
             self.info_fn,
-            self.validate_fn,
+            (self.validate_fn,),
         )
 
     def with_transform(

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from deepmerge import always_merger
-from typing_extensions import TypeAlias, TypedDict, TypeVarTuple
+from typing_extensions import TypeAlias, TypedDict
 
 from .. import _env
 from ._util import (
@@ -21,8 +21,6 @@ from ._util import (
 
 log = logging.getLogger(__name__)
 
-
-TArgs = TypeVarTuple("TArgs")
 
 _Path: TypeAlias = str | Path | os.PathLike
 
