@@ -165,7 +165,21 @@ def main():
         log.critical("Finished running all sessions.")
 
         if args.pause_before_exit:
-            input("Press Enter to continue...")
+            # input("Press Enter to continue...")
+            # Enter causes issues when we wrap this in a script.
+            # Instead, we'll just wait for the user to ctrl+c.
+            log.critical("Execution complete. Press Ctrl+C to exit...")
+            try:
+                # Use a simple loop that can be interrupted
+                while True:
+                    import time
+
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                log.critical("Received interrupt, exiting...")
+            except Exception as e:
+                log.critical(f"Unexpected error during pause: {e}")
+                raise
 
         log.critical("Exiting...")
 
