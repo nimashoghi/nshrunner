@@ -59,7 +59,7 @@ TReturn = TypeVar("TReturn", infer_variance=True)
 
 
 @dataclass
-class Session:
+class _Session:
     id: str
     """The ID of the session."""
 
@@ -305,7 +305,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         session_dir = self._session_dir(runs, id)
 
         # Create the session object (to return)
-        session = Session(id=id, dir_path=session_dir)
+        session = _Session(id=id, dir_path=session_dir)
 
         # Resolve the environment
         session.env = {
