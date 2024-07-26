@@ -5,9 +5,9 @@ import logging
 import os
 import sys
 import uuid
+from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from functools import cached_property
 from pathlib import Path
 from typing import ClassVar, Generic, TypeAlias, cast
 
@@ -26,6 +26,12 @@ from ._util.environment import (
     remove_wandb_environment_variables,
 )
 from ._util.git import _gitignored_dir
+from ._util.signal_handling import (
+    Signal,
+    SignalHandler,
+    SignalHandlers,
+    _with_signal_handlers,
+)
 from .snapshot import SnapshotArgType, SnapshotConfig, SnapshotInfo, snapshot_modules
 
 log = logging.getLogger(__name__)
@@ -105,6 +111,7 @@ def _wrap_run_fn(
     run_fn: Callable[[Unpack[TArguments]], TReturn],
     info_fn: Callable[[Unpack[TArguments]], RunInfo],
     validate_fns: Iterable[Callable[[Unpack[TArguments]], None]],
+    signal_handlers: Mapping[Signal, Sequence[SignalHandler]],
 ):
     @functools.wraps(run_fn)
     def wrapped_run_fn(*args: Unpack[TArguments]) -> TReturn:
@@ -122,6 +129,12 @@ def _wrap_run_fn(
         # Set additional environment variables
         with contextlib.ExitStack() as stack:
             stack.enter_context(_with_env(run_info.get("env", {})))
+
+            # Set up signal handlers
+            if signal_handlers:
+                stack.enter_context(_with_signal_handlers(signal_handlers))
+                # TODO: implement this function
+
             return run_fn(*args)
 
     return wrapped_run_fn
@@ -162,6 +175,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         validate_fn: Callable[[Unpack[TArguments]], None] | None = None,
         transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
         | None = None,
+        signal_handlers: SignalHandlers | None = None,
     ):
         self.config = config
         self.run_fn = run_fn
@@ -170,6 +184,17 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             validate_fn if validate_fn is not None else self.default_validate_fn
         )
         self.transform_fns = transform_fns or []
+
+        self.signal_handlers = defaultdict[Signal, list[SignalHandler]](lambda: [])
+        if signal_handlers is not None:
+            for signal_name, handlers in signal_handlers.items():
+                for handler in handlers:
+                    self.signal_handlers[signal_name].append(handler)
+
+    def with_signal_handler(self, name: Signal, handler: SignalHandler):
+        runner = copy.deepcopy(self)
+        runner.signal_handlers[name].append(handler)
+        return runner
 
     def transform_fn_generator(
         self,
@@ -191,13 +216,14 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             args = transform_fn(*copy.deepcopy(args))
         return args
 
-    @cached_property
+    @property
     def _wrapped_run_fn(self) -> Callable[[Unpack[TArguments]], TReturn]:
         return _wrap_run_fn(
             self.config,
             self.run_fn,
             self.info_fn,
             (self.validate_fn,),
+            self.signal_handlers,
         )
 
     def with_transform(
