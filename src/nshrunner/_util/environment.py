@@ -27,14 +27,14 @@ def remove_slurm_environment_variables():
         removed_env_vars[key] = os.environ.pop(key)
 
     log.debug(
-        f"Removed environment variables before launching new SLURM job: {list(removed_env_vars.keys())}"
+        f"Removed environment variables before launching new job: {list(removed_env_vars.keys())}"
     )
     try:
         yield
     finally:
         os.environ.update(removed_env_vars)
         log.debug(
-            f"Restored environment variables after launching new SLURM job: {list(removed_env_vars.keys())}"
+            f"Restored environment variables after launching new job: {list(removed_env_vars.keys())}"
         )
 
 
@@ -53,14 +53,14 @@ def remove_lsf_environment_variables():
         removed_env_vars[key] = os.environ.pop(key)
 
     log.debug(
-        f"Removed environment variables before launching new LSF job: {list(removed_env_vars.keys())}"
+        f"Removed environment variables before launching new job: {list(removed_env_vars.keys())}"
     )
     try:
         yield
     finally:
         os.environ.update(removed_env_vars)
         log.debug(
-            f"Restored environment variables after launching new LSF job: {list(removed_env_vars.keys())}"
+            f"Restored environment variables after launching new job: {list(removed_env_vars.keys())}"
         )
 
 
@@ -77,14 +77,38 @@ def remove_wandb_environment_variables():
         removed_env_vars[key] = os.environ.pop(key)
 
     log.debug(
-        f"Removed environment variables before launching new SLURM job: {list(removed_env_vars.keys())}"
+        f"Removed environment variables before launching new job: {list(removed_env_vars.keys())}"
     )
     try:
         yield
     finally:
         os.environ.update(removed_env_vars)
         log.debug(
-            f"Restored environment variables after launching new SLURM job: {list(removed_env_vars.keys())}"
+            f"Restored environment variables after launching new job: {list(removed_env_vars.keys())}"
+        )
+
+
+@contextmanager
+def remove_nshrunner_environment_variables():
+    """
+    Similar to above, but removes all "NSHRUNNER_" environment variables.
+    """
+
+    removed_env_vars = {}
+    for key in list(os.environ.keys()):
+        if not key.startswith("NSHRUNNER_"):
+            continue
+        removed_env_vars[key] = os.environ.pop(key)
+
+    log.debug(
+        f"Removed environment variables before launching new job: {list(removed_env_vars.keys())}"
+    )
+    try:
+        yield
+    finally:
+        os.environ.update(removed_env_vars)
+        log.debug(
+            f"Restored environment variables after launching new job: {list(removed_env_vars.keys())}"
         )
 
 
@@ -115,5 +139,5 @@ def set_additional_env_vars(additional_env_vars: dict[str, str] | None = None):
             else:
                 os.environ[key] = removed_env_vars[key]
         log.debug(
-            f"Restored environment variables after launching new SLURM job: {list(additional_env_vars.keys())}"
+            f"Restored environment variables after launching new job: {list(additional_env_vars.keys())}"
         )

@@ -149,23 +149,32 @@ with open(os.path.join(meta_dir, 'run.json'), 'w') as f:
     return setup_commands
 
 
+ON_EXIT_TEMPLATE = r"""
+# Execute on-exit scripts
+exit_script_dir="{exit_script_dir}"
+exit_scripts=("$exit_script_dir"/*)
+num_scripts=${{#exit_scripts[@]}}
+echo "Found $num_scripts on-exit script(s) in $exit_script_dir"
+for script in "${{exit_scripts[@]}}"; do
+    if [ -f "$script" ]; then
+        echo "Executing on-exit script: $script"
+        if [ -x "$script" ]; then
+            "$script"
+        else
+            bash "$script"
+        fi
+    fi
+done""".strip()
+
+
 def _emit_on_exit_commands(f: TextIOWrapper, exit_script_dir: Path):
     # Add the on-exit script support
     # Basically, this just emits bash code that iterates
     # over all files in the exit script directory and runs them
     # in a subshell.
-    f.write("\n# Execute on-exit scripts\n")
-    f.write(f'exit_script_dir="{str(exit_script_dir.resolve().absolute())}"\n')
-    f.write('exit_scripts=("$exit_script_dir"/*)\n')
-    f.write("num_scripts=${#exit_scripts[@]}\n")
-    f.write('echo "Found $num_scripts on-exit script(s) in $exit_script_dir"\n')
-    f.write('for script in "${exit_scripts[@]}"; do\n')
-    f.write('    if [ -f "$script" ]; then\n')
-    f.write('        echo "Executing on-exit script: $script"\n')
-    f.write('        if [ -x "$script" ]; then\n')
-    f.write('            "$script"\n')
-    f.write("        else\n")
-    f.write('            bash "$script"\n')
-    f.write("        fi\n")
-    f.write("    fi\n")
-    f.write("done\n")
+    f.write(
+        ON_EXIT_TEMPLATE.format(
+            exit_script_dir=str(exit_script_dir.resolve().absolute())
+        )
+        + "\n"
+    )

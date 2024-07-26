@@ -3,7 +3,6 @@ import copy
 import functools
 import logging
 import os
-import subprocess
 import sys
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -18,11 +17,12 @@ from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack
 from . import _env
 from ._logging import PythonLoggingConfig, init_python_logging
 from ._seed import SeedConfig
-from ._submit import lsf, slurm
+from ._submit import lsf, screen, slurm
 from ._submit._util import _set_default_envs, _write_run_metadata_commands
 from ._util.env import _with_env, _with_pythonpath_prepend
 from ._util.environment import (
     remove_lsf_environment_variables,
+    remove_nshrunner_environment_variables,
     remove_slurm_environment_variables,
     remove_wandb_environment_variables,
 )
@@ -153,41 +153,6 @@ def _wrap_run_fn(
             return run_fn(*args)
 
     return wrapped_run_fn
-
-
-def _ensure_supports_session():
-    # Make sure we have screen installed
-    try:
-        subprocess.run(
-            ["screen", "--version"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-    except FileNotFoundError:
-        raise FileNotFoundError(
-            "screen is not installed. Please install screen to use snapshot."
-        )
-
-
-def _launch_session(
-    session_command: list[str],
-    config_base_path: Path,
-    session_name: str,
-    attach: bool = True,
-):
-    return [
-        "screen",
-        "-dmS" if not attach else "-S",
-        session_name,
-        # Save the logs to a file
-        "-L",
-        "-Logfile",
-        str((config_base_path / f"{session_name}.log").absolute()),
-        # Enable UTF-8 encoding
-        "-U",
-        *session_command,
-    ]
 
 
 def _shell_hook(env_path: Path):
@@ -413,9 +378,14 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
     ):
         return list(self.local_generator(runs, env=env, transforms=transforms))
 
+    @remove_nshrunner_environment_variables()
+    @remove_lsf_environment_variables()
+    @remove_slurm_environment_variables()
+    @remove_wandb_environment_variables()
     def session(
         self,
         runs: Iterable[tuple[Unpack[TArguments]]],
+        options: screen.ScreenJobKwargs,
         *,
         snapshot: SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
@@ -423,14 +393,10 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
         | None = None,
         activate_venv: bool = True,
-        session_name: str = "nshrunner",
-        attach: bool = True,
         print_command: bool = True,
-        pause_before_exit: bool = False,
-        emit_metadata: bool = True,
     ):
         # Make sure the `session` utility is installed
-        _ensure_supports_session()
+        screen.ensure_has_screen()
 
         # Resolve all runs
         runs, session = self._setup_session(
@@ -439,43 +405,33 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             snapshot=snapshot,
             transforms=transforms or [],
         )
+        base_dir = session.dir_path / "submit"
+        base_dir.mkdir(parents=True, exist_ok=True)
 
-        # Resolve env
-        env = _set_default_envs(
-            session.env,
-            job_index=None,
-            local_rank="0",
-            global_rank="0",
-            world_size="1",
-            base_dir=session.dir_path,
-            timeout_signal=None,
-            preempt_signal=None,
-        )
-        # Emit the setup commands to write the metadata
-        if emit_metadata:
-            setup_commands = _write_run_metadata_commands(
-                setup_commands, is_worker_script=False
-            )
-            setup_commands = _write_run_metadata_commands(
-                setup_commands, is_worker_script=True
-            )
+        # Update the job options
+        options = screen.update_options(options, base_dir)
 
-        # Use setup commands to directly put pythonpath into the session bash script
+        # Use setup commands to directly put env/pythonpath into the session bash script
         setup_commands_pre: list[str] = []
         if activate_venv:
             setup_commands_pre.append("echo 'Activating environment'")
             setup_commands_pre.append(_shell_hook(Path(sys.prefix)))
 
         # Merge the setup commands
-        setup_commands = setup_commands_pre + list(setup_commands or [])
+        setup_commands = (
+            setup_commands_pre
+            + list(setup_commands or [])
+            + list(options.get("setup_commands", []))
+        )
         del setup_commands_pre
+
+        # Merge the environment
+        env = {**session.env, **options.get("environment", {})}
 
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
 
-        command_base_dir = session.dir_path / "session"
-        command_base_dir.mkdir(parents=True, exist_ok=True)
-        script_path = command_base_dir / "session.sh"
+        script_path = base_dir / "worker.sh"
         command = callable_to_command(
             script_path,
             self._wrapped_run_fn,
@@ -484,27 +440,27 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             setup_commands=setup_commands,
             execution={
                 "mode": "sequential",
-                "pause_before_exit": pause_before_exit,
+                "pause_before_exit": options.get("pause_before_exit", True),
             },
         )
 
-        # Get the screen session command
-        command = _launch_session(
+        # Create the submission script
+        submission = screen.to_array_batch_script(
             command,
-            command_base_dir,
-            session_name,
-            attach=attach,
+            script_path=base_dir / "submit.sh",
+            config=options,
+            env=env,
         )
-        command = " ".join(command)
 
         # Print the full command so the user can copy-paste it
         if print_command:
-            log.critical("Run the following command to launch the session:\n\n")
+            log.critical("Run the following command to submit the jobs:\n\n")
             # We print the command but log the rest so the user can pipe the command to bash
-            print(f"{command}\n\n")
+            print(f"{submission.command_str}\n\n")
 
-        return command
+        return submission
 
+    @remove_nshrunner_environment_variables()
     @remove_lsf_environment_variables()
     @remove_slurm_environment_variables()
     @remove_wandb_environment_variables()
@@ -581,6 +537,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         return submission
 
+    @remove_nshrunner_environment_variables()
     @remove_lsf_environment_variables()
     @remove_slurm_environment_variables()
     @remove_wandb_environment_variables()
