@@ -298,6 +298,9 @@ class SlurmJobKwargs(TypedDict, total=False):
 
 DEFAULT_KWARGS: SlurmJobKwargs = {
     "name": "nshrunner",
+    "environment": {
+        _env.SUBMIT_INTERFACE_MODULE: __name__,
+    },
     # "nodes": 1,
     # "time": timedelta(hours=2),
     "timeout_signal": signal.SIGURG,

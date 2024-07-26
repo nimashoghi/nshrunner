@@ -240,6 +240,9 @@ class LSFJobKwargs(TypedDict, total=False):
 
 DEFAULT_KWARGS: LSFJobKwargs = {
     "name": "nshrunner",
+    "environment": {
+        _env.SUBMIT_INTERFACE_MODULE: __name__,
+    },
     # "nodes": 1,
     # "rs_per_node": 1,
     # "walltime": timedelta(hours=2),

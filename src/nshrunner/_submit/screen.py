@@ -109,6 +109,9 @@ class ScreenJobKwargs(TypedDict, total=False):
 
 DEFAULT_KWARGS: ScreenJobKwargs = {
     "name": "nshrunner",
+    "environment": {
+        _env.SUBMIT_INTERFACE_MODULE: __name__,
+    },
     "attach": True,
     "pause_before_exit": True,
     "emit_metadata": True,
