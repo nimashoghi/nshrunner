@@ -1,8 +1,26 @@
+import logging
 import os
+import signal
 from dataclasses import dataclass
 from pathlib import Path
 
 from . import _env
+
+log = logging.getLogger(__name__)
+
+
+def _get_signal(env_var: str):
+    if not (sig_name := os.environ.get(env_var)):
+        return None
+
+    sig_name = sig_name.replace("SIG", "")
+    try:
+        return signal.Signals[sig_name]
+    except KeyError:
+        log.warning(
+            f"Invalid signal name '{sig_name}' in environment variable '{env_var}'"
+        )
+        return None
 
 
 @dataclass
@@ -30,10 +48,10 @@ class Session:
     submit_job_index: int | None
     """Index of the current job in a job array, if applicable."""
 
-    submit_timeout_signal: int | None
+    submit_timeout_signal: signal.Signals | None
     """Signal number to be used for job timeout, if specified."""
 
-    submit_preempt_signal: int | None
+    submit_preempt_signal: signal.Signals | None
     """Signal number to be used for job preemption, if specified."""
 
     submit_local_rank: int | None
@@ -77,12 +95,8 @@ class Session:
             submit_job_index=int(os.environ[_env.SUBMIT_JOB_INDEX])
             if _env.SUBMIT_JOB_INDEX in os.environ
             else None,
-            submit_timeout_signal=int(os.environ[_env.SUBMIT_TIMEOUT_SIGNAL])
-            if _env.SUBMIT_TIMEOUT_SIGNAL in os.environ
-            else None,
-            submit_preempt_signal=int(os.environ[_env.SUBMIT_PREEMPT_SIGNAL])
-            if _env.SUBMIT_PREEMPT_SIGNAL in os.environ
-            else None,
+            submit_timeout_signal=_get_signal(_env.SUBMIT_TIMEOUT_SIGNAL),
+            submit_preempt_signal=_get_signal(_env.SUBMIT_PREEMPT_SIGNAL),
             submit_local_rank=int(os.environ[_env.SUBMIT_LOCAL_RANK])
             if _env.SUBMIT_LOCAL_RANK in os.environ
             else None,
