@@ -80,7 +80,7 @@ def _set_default_envs(
     )
 
     # Update the environment variables to include the preempt signal
-    env[_env.SUBMITPREEMPT_SIGNAL] = (
+    env[_env.SUBMIT_PREEMPT_SIGNAL] = (
         preempt_signal.name if preempt_signal is not None else ""
     )
 
