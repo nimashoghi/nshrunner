@@ -486,6 +486,13 @@ def _write_batch_script_to_file(
                 f.write(f"export {key}={value}\n")
             f.write("\n")
 
+        if (
+            setup_commands := kwargs.get("submission_script_setup_commands")
+        ) is not None:
+            for setup_command in setup_commands:
+                f.write(f"{setup_command}\n")
+            f.write("\n")
+
         if (command_prefix := kwargs.get("command_prefix")) is not None:
             command = " ".join(
                 x_stripped
