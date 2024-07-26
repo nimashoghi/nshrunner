@@ -431,9 +431,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
 
-        script_path = base_dir / "worker.sh"
         command = callable_to_command(
-            script_path,
+            base_dir / "worker.sh",
             self._wrapped_run_fn,
             runs,
             environment=env,
@@ -510,9 +509,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
 
-        script_path = base_dir / "worker.sh"
         command = callable_to_command(
-            script_path,
+            base_dir / "worker.sh",
             self._wrapped_run_fn,
             runs,
             environment=env,
@@ -587,9 +585,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
 
-        script_path = base_dir / "worker.sh"
         command = callable_to_command(
-            script_path,
+            base_dir / "worker.sh",
             self._wrapped_run_fn,
             runs,
             environment={**session.env, **options.get("environment", {})},
