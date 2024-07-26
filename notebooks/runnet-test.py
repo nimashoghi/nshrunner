@@ -16,8 +16,8 @@ list(runner.local(runs))
 # %%
 runner.session(
     runs,
+    {},
     snapshot=True,
-    pause_before_exit=True,
     env={"CUDA_VISIBLE_DEVICES": "0"},
 )
 

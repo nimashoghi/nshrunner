@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Generic, TypeAlias, cast
+from typing import ClassVar, Generic, TypeAlias, cast
 
 import nshconfig as C
 from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack
@@ -18,8 +18,7 @@ from . import _env
 from ._logging import PythonLoggingConfig, init_python_logging
 from ._seed import SeedConfig
 from ._submit import lsf, screen, slurm
-from ._submit._util import _set_default_envs, _write_run_metadata_commands
-from ._util.env import _with_env, _with_pythonpath_prepend
+from ._util.env import _with_env
 from ._util.environment import (
     remove_lsf_environment_variables,
     remove_nshrunner_environment_variables,
@@ -68,7 +67,7 @@ class Session:
     """The snapshot information for the session."""
 
 
-class Config(C.Config):
+class RunnerConfig(C.Config):
     savedir: _Path | None = None
     """
     The `savedir` parameter is a string that represents the directory where the program will save its execution files and logs.
@@ -123,7 +122,7 @@ def _tqdm_if_installed(iterable: Iterable[T], *args, **kwargs) -> Iterable[T]:
 
 
 def _wrap_run_fn(
-    config: Config,
+    config: RunnerConfig,
     run_fn: Callable[[Unpack[TArguments]], TReturn],
     info_fn: Callable[[Unpack[TArguments]], RunInfo],
     validate_fns: Iterable[
@@ -168,6 +167,8 @@ def _shell_hook(env_path: Path):
 
 
 class Runner(Generic[TReturn, Unpack[TArguments]]):
+    Config: ClassVar = RunnerConfig
+
     def generate_id(self):
         return str(uuid.uuid4())
 
@@ -182,7 +183,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
     def __init__(
         self,
         run_fn: Callable[[Unpack[TArguments]], TReturn],
-        config: Config | ConfigDict = {},
+        config: RunnerConfig = RunnerConfig(),
         *,
         info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
         validate_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]] | None]
@@ -190,9 +191,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
         | None = None,
     ):
-        if not isinstance(config, Config):
-            config = Config(**config)
-
         self.config = config
         self.run_fn = run_fn
         self.info_fn = info_fn if info_fn is not None else self.default_info_fn
@@ -354,17 +352,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             transforms=transforms or [],
         )
 
-        with contextlib.ExitStack() as stack:
-            if session.env:
-                stack.enter_context(_with_env(session.env))
-
-            if session.snapshot is not None:
-                stack.enter_context(
-                    _with_pythonpath_prepend(
-                        (session.snapshot.snapshot_dir, session.snapshot.modules)
-                    )
-                )
-
+        with _with_env(session.env):
             for args in _tqdm_if_installed(runs):
                 yield self._wrapped_run_fn(*args)
 
