@@ -13,6 +13,7 @@ from typing_extensions import TypeAlias, TypedDict, TypeVarTuple
 from .. import _env
 from ._util import (
     Submission,
+    _emit_on_exit_commands,
     _set_default_envs,
     _write_run_metadata_commands,
     _write_submission_meta,
@@ -212,7 +213,7 @@ class LSFJobKwargs(TypedDict, total=False):
     """
     Whether to support running an on-exit script outside of jsrun.
 
-    This is done by setting the environment variable `NSHRUNNER_LSF_EXIT_SCRIPT_DIR` to the path of an initially empty directory.
+    This is done by setting the environment variable `NSHRUNNER_EXIT_SCRIPT_DIR` to the path of an initially empty directory.
     Whenever the script wants something to be done on exit, it should write a bash script to this directory.
     """
 
@@ -459,21 +460,7 @@ def _write_batch_script_to_file(
             # Basically, this just emits bash code that iterates
             # over all files in the exit script directory and runs them
             # in a subshell.
-            f.write("\n# Execute on-exit scripts\n")
-            f.write(f'exit_script_dir="{exit_script_dir}"\n')
-            f.write('exit_scripts=("$exit_script_dir"/*)\n')
-            f.write("num_scripts=${#exit_scripts[@]}\n")
-            f.write('echo "Found $num_scripts on-exit script(s) in $exit_script_dir"\n')
-            f.write('for script in "${exit_scripts[@]}"; do\n')
-            f.write('    if [ -f "$script" ]; then\n')
-            f.write('        echo "Executing on-exit script: $script"\n')
-            f.write('        if [ -x "$script" ]; then\n')
-            f.write('            "$script"\n')
-            f.write("        else\n")
-            f.write('            bash "$script"\n')
-            f.write("        fi\n")
-            f.write("    fi\n")
-            f.write("done\n")
+            _emit_on_exit_commands(f, exit_script_dir)
 
     return path
 
@@ -518,13 +505,13 @@ def update_options(kwargs_in: LSFJobKwargs, base_dir: Path) -> LSFJobKwargs:
             is_worker_script=False,
         )
 
-    # If `on_exit_script_support` is enabled, set the environment variable for LSF_EXIT_SCRIPT_DIR
+    # If `on_exit_script_support` is enabled, set the environment variable for EXIT_SCRIPT_DIR
     if kwargs.get("on_exit_script_support"):
         exit_script_dir = base_dir / "exit_scripts"
         exit_script_dir.mkdir(exist_ok=True)
         kwargs["environment"] = {
             **kwargs.get("environment", {}),
-            _env.LSF_EXIT_SCRIPT_DIR: str(exit_script_dir.absolute()),
+            _env.EXIT_SCRIPT_DIR: str(exit_script_dir.absolute()),
         }
         kwargs["_exit_script_dir"] = exit_script_dir
 

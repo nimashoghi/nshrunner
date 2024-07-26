@@ -11,8 +11,10 @@ from typing import Literal, cast
 from deepmerge import always_merger
 from typing_extensions import TypeAlias, TypedDict, TypeVarTuple
 
+from .. import _env
 from ._util import (
     Submission,
+    _emit_on_exit_commands,
     _set_default_envs,
     _write_run_metadata_commands,
     _write_submission_meta,
@@ -281,6 +283,19 @@ class SlurmJobKwargs(TypedDict, total=False):
     - When the job starts running, the job ID and environment variables will be written to a file named `run.json` in the `meta` directory.
     """
 
+    on_exit_script_support: bool
+    """
+    Whether to support running an on-exit script outside of srun.
+
+    This is done by setting the environment variable `NSHRUNNER_EXIT_SCRIPT_DIR` to the path of an initially empty directory.
+    Whenever the script wants something to be done on exit, it should write a bash script to this directory.
+    """
+
+    _exit_script_dir: Path
+    """
+    The directory to write the on-exit scripts to. (Internal use only)
+    """
+
 
 DEFAULT_KWARGS: SlurmJobKwargs = {
     "name": "nshrunner",
@@ -292,6 +307,7 @@ DEFAULT_KWARGS: SlurmJobKwargs = {
     "open_mode": "append",
     # "requeue": True,
     "emit_metadata": True,
+    "on_exit_script_support": True,
 }
 
 
@@ -474,7 +490,23 @@ def _write_batch_script_to_file(
                 for x in (command_prefix, command)
                 if (x_stripped := x.strip())
             )
-        f.write(f"{command}\n")
+        if not kwargs.get("on_exit_script_support"):
+            f.write(f"{command}\n")
+        else:
+            if (exit_script_dir := kwargs.get("_exit_script_dir")) is None:
+                raise ValueError(
+                    "on_exit_script_support is enabled, but _exit_script_dir is not set. "
+                    "This is a logic error and should not happen."
+                )
+
+            f.write(f"{command} &\n")
+            f.write("wait\n")
+
+            # Add the on-exit script support
+            # Basically, this just emits bash code that iterates
+            # over all files in the exit script directory and runs them
+            # in a subshell.
+            _emit_on_exit_commands(f, exit_script_dir)
 
 
 def update_options(kwargs_in: SlurmJobKwargs, base_dir: Path):
@@ -562,6 +594,16 @@ def update_options(kwargs_in: SlurmJobKwargs, base_dir: Path):
             kwargs.get("submission_script_setup_commands"),
             is_worker_script=False,
         )
+
+    # If `on_exit_script_support` is enabled, set the environment variable for EXIT_SCRIPT_DIR
+    if kwargs.get("on_exit_script_support"):
+        exit_script_dir = base_dir / "exit_scripts"
+        exit_script_dir.mkdir(exist_ok=True)
+        kwargs["environment"] = {
+            **kwargs.get("environment", {}),
+            _env.EXIT_SCRIPT_DIR: str(exit_script_dir.absolute()),
+        }
+        kwargs["_exit_script_dir"] = exit_script_dir
 
     return kwargs
 
