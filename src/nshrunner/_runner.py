@@ -371,7 +371,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
     def session(
         self,
         runs: Iterable[tuple[Unpack[TArguments]]],
-        options: screen.ScreenJobKwargs,
+        options: screen.ScreenJobKwargs = {},
         *,
         snapshot: SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
