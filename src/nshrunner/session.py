@@ -3,6 +3,9 @@ import os
 import signal
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
+
+from typing_extensions import assert_never
 
 from . import _env
 
@@ -111,3 +114,29 @@ class Session:
             else None,
             submit_interface_module=os.environ.get(_env.SUBMIT_INTERFACE_MODULE),
         )
+
+    def write_exit_script(
+        self,
+        script_name: str,
+        script_contents: str,
+        on_error: Literal["warn", "raise"] = "warn",
+    ):
+        """
+        Write an exit script to the session directory.
+        """
+        if not self.exit_script_dir:
+            error_msg = "No exit script directory specified"
+            match on_error:
+                case "raise":
+                    raise ValueError(error_msg)
+                case "warn":
+                    log.warning(error_msg)
+                case _:
+                    assert_never(on_error)
+            return
+
+        script_path = self.exit_script_dir / script_name
+        with open(script_path, "w") as f:
+            f.write(script_contents)
+        os.chmod(script_path, 0o755)
+        log.info(f"Wrote exit script to {script_path}")
