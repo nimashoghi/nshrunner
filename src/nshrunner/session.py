@@ -92,25 +92,25 @@ class Session:
             snapshot_dir=Path(snapshot_dir) if snapshot_dir else None,
             snapshot_modules=snapshot_modules.split(",") if snapshot_modules else None,
             is_worker_script=bool(int(os.environ.get(_env.IS_WORKER_SCRIPT, "0"))),
-            submit_base_dir=Path(os.environ[_env.SUBMIT_BASE_DIR])
-            if _env.SUBMIT_BASE_DIR in os.environ
+            submit_base_dir=Path(p)
+            if (p := os.environ.get(_env.SUBMIT_BASE_DIR))
             else None,
-            submit_job_index=int(os.environ[_env.SUBMIT_JOB_INDEX])
-            if _env.SUBMIT_JOB_INDEX in os.environ
+            submit_job_index=int(job_index)
+            if (job_index := os.environ.get(_env.SUBMIT_JOB_INDEX))
             else None,
             submit_timeout_signal=_get_signal(_env.SUBMIT_TIMEOUT_SIGNAL),
             submit_preempt_signal=_get_signal(_env.SUBMIT_PREEMPT_SIGNAL),
-            submit_local_rank=int(os.environ[_env.SUBMIT_LOCAL_RANK])
-            if _env.SUBMIT_LOCAL_RANK in os.environ
+            submit_local_rank=int(rank)
+            if (rank := os.environ.get(_env.SUBMIT_LOCAL_RANK))
             else None,
-            submit_global_rank=int(os.environ[_env.SUBMIT_GLOBAL_RANK])
-            if _env.SUBMIT_GLOBAL_RANK in os.environ
+            submit_global_rank=int(rank)
+            if (rank := os.environ.get(_env.SUBMIT_GLOBAL_RANK))
             else None,
-            submit_world_size=int(os.environ[_env.SUBMIT_WORLD_SIZE])
-            if _env.SUBMIT_WORLD_SIZE in os.environ
+            submit_world_size=int(size)
+            if (size := os.environ.get(_env.SUBMIT_WORLD_SIZE))
             else None,
-            exit_script_dir=Path(os.environ[_env.EXIT_SCRIPT_DIR])
-            if _env.EXIT_SCRIPT_DIR in os.environ
+            exit_script_dir=Path(p)
+            if (p := os.environ.get(_env.EXIT_SCRIPT_DIR))
             else None,
             submit_interface_module=os.environ.get(_env.SUBMIT_INTERFACE_MODULE),
         )
