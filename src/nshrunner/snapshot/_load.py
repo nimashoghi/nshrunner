@@ -1,3 +1,4 @@
+import importlib
 import importlib.util
 import logging
 import sys
@@ -22,7 +23,7 @@ def load_existing_snapshot(
         (and thus any previously imported module will not be updated).
     """
 
-    snapshot_dir = snapshot_dir.resolve().absolute()
+    snapshot_dir = snapshot_dir.absolute()
     snapshot_dir_str = str(snapshot_dir)
     # If the snapshot directory is already in the Python path, do nothing
     if snapshot_dir_str in sys.path:
@@ -33,19 +34,28 @@ def load_existing_snapshot(
     modules_list: list[str] = []
     errors: list[str] = []
     for module_dir in snapshot_dir.iterdir():
+        module_dir = module_dir.absolute()
         if not module_dir.is_dir():
             continue
 
-        module_name = module_dir.name
+        # Check if the module exists in the filesystem
+        if (spec := importlib.util.find_spec(module_dir.name)) is not None:
+            log.debug(
+                f"Module {module_dir.name} exists in the filesystem. Path: {spec.origin}"
+            )
+            if spec.origin:
+                original_path = Path(spec.origin).absolute()
+                log.info(f"Module {module_dir.name}: {original_path} -> {module_dir}")
+
         # If the module has already been imported, warn the user
-        if module_name in sys.modules:
+        if module_dir.name in sys.modules:
             errors.append(
-                f"Module {module_name} has already been imported. "
+                f"Module {module_dir.name} has already been imported. "
                 "All previously imported modules will not be updated."
             )
             continue
 
-        modules_list.append(module_name)
+        modules_list.append(module_dir.name)
 
     # If there are any errors, handle them according to the `on_error` parameter
     if errors:
