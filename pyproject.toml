@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nshrunner"
-version = "0.12.0"
+version = "0.13.0"
 description = ""
 authors = ["Nima Shoghi <nimashoghi@gmail.com>"]
 readme = "README.md"
@@ -38,3 +38,6 @@ reportPrivateImportUsage = false
 
 [tool.ruff.lint]
 ignore = ["F722", "F821", "E731", "E741"]
+
+[tool.poetry.extras]
+extra = ["tqdm"]
