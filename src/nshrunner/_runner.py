@@ -381,9 +381,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         activate_venv: bool = True,
         print_command: bool = True,
     ):
-        # Make sure the `session` utility is installed
-        screen.ensure_has_screen()
-
         # Resolve all runs
         runs, session = self._setup_session(
             runs,

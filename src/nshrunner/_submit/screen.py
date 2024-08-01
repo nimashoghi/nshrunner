@@ -1,7 +1,6 @@
 import copy
 import logging
 import os
-import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TypeAlias, cast
@@ -117,21 +116,6 @@ DEFAULT_KWARGS: ScreenJobKwargs = {
     "emit_metadata": True,
     "on_exit_script_support": True,
 }
-
-
-def ensure_has_screen():
-    # Make sure we have screen installed
-    try:
-        subprocess.run(
-            ["screen", "--version"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-    except FileNotFoundError:
-        raise FileNotFoundError(
-            "screen is not installed. Please install screen to use the screen job runner."
-        )
 
 
 def _write_batch_script_to_file(
