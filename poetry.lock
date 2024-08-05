@@ -471,6 +471,21 @@ files = [
 pydantic = "*"
 
 [[package]]
+name = "nshsnap"
+version = "0.2.0"
+description = ""
+optional = false
+python-versions = "<4.0,>=3.10"
+files = [
+    {file = "nshsnap-0.2.0-py3-none-any.whl", hash = "sha256:754d6858f9b82405589c32c77f801767a2fa4724ea5d9d7eb23fdce44fb7f845"},
+    {file = "nshsnap-0.2.0.tar.gz", hash = "sha256:d95c61d7b7f77903554d6810180ad0976838d97e0a5b24767140e3a5735b7640"},
+]
+
+[package.dependencies]
+nshconfig = "*"
+uuid7 = "*"
+
+[[package]]
 name = "nshutils"
 version = "0.7.0"
 description = ""
@@ -1122,6 +1137,17 @@ files = [
 ]
 
 [[package]]
+name = "uuid7"
+version = "0.1.0"
+description = "UUID version 7, generating time-sorted UUIDs with 200ns time resolution and 48 bits of randomness"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "uuid7-0.1.0-py2.py3-none-any.whl", hash = "sha256:5e259bb63c8cb4aded5927ff41b444a80d0c7124e8a0ced7cf44efa1f5cccf61"},
+    {file = "uuid7-0.1.0.tar.gz", hash = "sha256:8c57aa32ee7456d3cc68c95c4530bc571646defac01895cfc73545449894a63c"},
+]
+
+[[package]]
 name = "wcwidth"
 version = "0.2.13"
 description = "Measures the displayed width of unicode strings in a terminal"
@@ -1143,7 +1169,10 @@ files = [
     {file = "widgetsnbextension-4.0.11.tar.gz", hash = "sha256:8b22a8f1910bfd188e596fe7fc05dcbd87e810c8a4ba010bdb3da86637398474"},
 ]
 
+[extras]
+extra = ["tqdm"]
+
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "5b44ed96d14e5c8b820ae3349503958a260c353715027e9fa142bd23dbed14bf"
+content-hash = "9bbd2eb6e39725f483857d55573206f0b33b4c4164031c343b31a26a45c016f6"

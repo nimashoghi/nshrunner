@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import ClassVar, Generic, TypeAlias, cast
 
 import nshconfig as C
+import nshsnap
 from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack
 
 from . import _env
@@ -32,12 +33,18 @@ from ._util.signal_handling import (
     SignalHandlers,
     _with_signal_handlers,
 )
-from .snapshot import SnapshotArgType, SnapshotConfig, SnapshotInfo, snapshot_modules
 
 log = logging.getLogger(__name__)
 
 
 _Path: TypeAlias = str | Path | os.PathLike
+_SnapshotArgType: TypeAlias = (
+    bool | nshsnap.SnapshotConfig | nshsnap.SnapshotConfigKwargsDict
+)
+
+DEFAULT_SNAPSHOT_KWARGS: nshsnap.SnapshotConfigKwargsDict = {
+    "editable_modules": True,
+}
 
 
 class RunInfo(TypedDict, total=False):
@@ -69,7 +76,7 @@ class _Session:
     env: dict[str, str] = field(default_factory=lambda: {})
     """Environment variables to set for the session."""
 
-    snapshot: SnapshotInfo | None = None
+    snapshot: nshsnap.SnapshotInfo | None = None
     """The snapshot information for the session."""
 
 
@@ -291,7 +298,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         id: str | None = None,
         *,
         env: Mapping[str, str] | None,
-        snapshot: SnapshotArgType,
+        snapshot: _SnapshotArgType,
         transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]],
     ):
         # Resolve all runs
@@ -317,12 +324,23 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         }
 
         # Take a snapshot of the environment if needed
-        if (
-            snapshot_config := SnapshotConfig._from_nshrunner_ctor(
-                snapshot, configs=runs, base_dir=session_dir
-            )
-        ) is not None:
-            session.snapshot = snapshot_modules(snapshot_config)
+        if snapshot:
+            # If the snapshot is not a SnapshotConfig object, create one
+            if not isinstance(snapshot, nshsnap.SnapshotConfig):
+                if snapshot is True:
+                    snapshot = {}
+
+                # Merge the default snapshot kwargs
+                snapshot = {**DEFAULT_SNAPSHOT_KWARGS, **snapshot}
+
+                # If the save directory is not set, set it to the session directory
+                if not snapshot.get("snapshot_dir"):
+                    snapshot_dir = _gitignored_dir(session_dir / "nshsnap", create=True)
+                    snapshot["snapshot_dir"] = snapshot_dir
+
+                snapshot = nshsnap.SnapshotConfig.from_kwargs(snapshot)
+
+            session.snapshot = nshsnap.snapshot(snapshot)
             snapshot_path_str = str(session.snapshot.snapshot_dir.absolute())
             # Update the environment to include the snapshot path and
             # prepend the new PYTHONPATH to the env dict.
@@ -373,7 +391,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs: Iterable[tuple[Unpack[TArguments]]],
         options: screen.ScreenJobKwargs = {},
         *,
-        snapshot: SnapshotArgType,
+        snapshot: _SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
         transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
@@ -451,7 +469,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs: Iterable[tuple[Unpack[TArguments]]],
         options: slurm.SlurmJobKwargs,
         *,
-        snapshot: SnapshotArgType,
+        snapshot: _SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
         transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
@@ -527,7 +545,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs: Iterable[tuple[Unpack[TArguments]]],
         options: lsf.LSFJobKwargs,
         *,
-        snapshot: SnapshotArgType,
+        snapshot: _SnapshotArgType,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
         transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
