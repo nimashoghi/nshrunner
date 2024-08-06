@@ -1,9 +1,12 @@
 [tool.poetry]
 name = "nshrunner"
-version = "0.14.1"
+version = "0.14.2"
 description = ""
 authors = ["Nima Shoghi <nimashoghi@gmail.com>"]
 readme = "README.md"
+
+[tool.poetry.urls]
+homepage = "https://github.com/nimashoghi/nshrunner"
 
 [tool.poetry.dependencies]
 python = "^3.10"
