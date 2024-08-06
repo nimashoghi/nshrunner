@@ -38,9 +38,7 @@ log = logging.getLogger(__name__)
 
 
 _Path: TypeAlias = str | Path | os.PathLike
-_SnapshotArgType: TypeAlias = (
-    bool | nshsnap.SnapshotConfig | nshsnap.SnapshotConfigKwargsDict
-)
+Snapshot: TypeAlias = bool | nshsnap.SnapshotConfig | nshsnap.SnapshotConfigKwargsDict
 
 DEFAULT_SNAPSHOT_KWARGS: nshsnap.SnapshotConfigKwargsDict = {
     "editable_modules": True,
@@ -298,7 +296,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         id: str | None = None,
         *,
         env: Mapping[str, str] | None,
-        snapshot: _SnapshotArgType,
+        snapshot: Snapshot,
         transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]],
     ):
         # Resolve all runs
@@ -391,7 +389,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs: Iterable[tuple[Unpack[TArguments]]],
         options: screen.ScreenJobKwargs = {},
         *,
-        snapshot: _SnapshotArgType,
+        snapshot: Snapshot,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
         transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
@@ -469,7 +467,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs: Iterable[tuple[Unpack[TArguments]]],
         options: slurm.SlurmJobKwargs,
         *,
-        snapshot: _SnapshotArgType,
+        snapshot: Snapshot,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
         transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
@@ -545,7 +543,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs: Iterable[tuple[Unpack[TArguments]]],
         options: lsf.LSFJobKwargs,
         *,
-        snapshot: _SnapshotArgType,
+        snapshot: Snapshot,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
         transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
