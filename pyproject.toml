@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nshrunner"
-version = "0.14.2"
+version = "0.14.3"
 description = ""
 authors = ["Nima Shoghi <nimashoghi@gmail.com>"]
 readme = "README.md"

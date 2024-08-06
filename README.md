@@ -19,7 +19,8 @@ When running ML training jobs on different machines and environments, it can be 
 nshrunner can be installed using pip:
 
 ```bash
-pip install nshrunner```
+pip install nshrunner
+```
 
 ## Usage
 
