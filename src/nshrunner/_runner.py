@@ -40,9 +40,7 @@ log = logging.getLogger(__name__)
 _Path: TypeAlias = str | Path | os.PathLike
 Snapshot: TypeAlias = bool | nshsnap.SnapshotConfig | nshsnap.SnapshotConfigKwargsDict
 
-DEFAULT_SNAPSHOT_KWARGS: nshsnap.SnapshotConfigKwargsDict = {
-    "editable_modules": True,
-}
+DEFAULT_SNAPSHOT_KWARGS: nshsnap.SnapshotConfigKwargsDict = {}
 
 
 class RunInfo(TypedDict, total=False):
@@ -97,6 +95,10 @@ class RunnerConfig(C.Config):
 
     validate_no_duplicate_ids: bool = True
     """Whether to validate that there are no duplicate IDs in the runs."""
+
+    auto_snapshot_args_resolved_modules: bool = True
+    """If enabled, `nshsnap` will automatically look through the function
+    arguments and snapshot any third-party modules that are resolved."""
 
 
 T = TypeVar("T", infer_variance=True)
@@ -337,6 +339,10 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
                     snapshot["snapshot_dir"] = snapshot_dir
 
                 snapshot = nshsnap.SnapshotConfig.from_kwargs(snapshot)
+
+            # Automatically snapshot any third-party modules that are resolved
+            if self.config.auto_snapshot_args_resolved_modules:
+                snapshot = snapshot.with_resolved_modules(*runs)
 
             session.snapshot = nshsnap.snapshot(snapshot)
             snapshot_path_str = str(session.snapshot.snapshot_dir.absolute())
