@@ -15,15 +15,20 @@ class PythonLoggingConfig(C.Config):
     log_save_dir: Path | None = None
     """Directory to save logs to. If None, logs will not be saved."""
 
-    rich: bool = False
-    """If enabled, will use the rich library to format the Python logger output."""
-    rich_tracebacks: bool = True
-    """If enabled, will use the rich library to format the Python logger tracebacks."""
+    treescope: bool = True
+    """If enabled, will use the treescope library to visualize data structures in notebooks."""
+    treescope_autovisualize_arrays: bool = True
+    """If enabled, will automatically visualize arrays with treescope (if `treescope` is enabled)."""
 
     lovely_tensors: bool = False
     """If enabled, will use the lovely-tensors library to format PyTorch tensors. False by default as it causes issues when used with `torch.vmap`."""
     lovely_numpy: bool = False
     """If enabled, will use the lovely-numpy library to format numpy arrays. False by default as it causes some issues with other libaries."""
+
+    rich: bool = False
+    """If enabled, will use the rich library to format the Python logger output."""
+    rich_tracebacks: bool = True
+    """If enabled, will use the rich library to format the Python logger tracebacks."""
 
     def pretty_(
         self,
