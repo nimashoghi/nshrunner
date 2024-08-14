@@ -48,6 +48,8 @@ class PythonLoggingConfig(C.Config):
 
 def init_python_logging(config: PythonLoggingConfig):
     nshutils.init_python_logging(
+        treescope=config.treescope,
+        treescope_autovisualize_arrays=config.treescope_autovisualize_arrays,
         lovely_tensors=config.lovely_tensors,
         lovely_numpy=config.lovely_numpy,
         rich=config.rich,
