@@ -141,8 +141,7 @@ def main():
                 os.environ["CUDA_VISIBLE_DEVICES"] = os.environ["ROCR_VISIBLE_DEVICES"]
                 os.environ.pop("ROCR_VISIBLE_DEVICES")
 
-        paths = list(_resolve_paths(args.paths))
-        if not paths:
+        if not (paths := list(_resolve_paths(args.paths))):
             raise ValueError("No paths provided")
 
         # Sort by the job index.
@@ -177,9 +176,6 @@ def main():
                     time.sleep(1)
             except KeyboardInterrupt:
                 log.critical("Received interrupt, exiting...")
-            except Exception as e:
-                log.critical(f"Unexpected error during pause: {e}")
-                raise
 
         log.critical("Exiting...")
 
