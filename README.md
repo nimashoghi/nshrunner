@@ -34,7 +34,7 @@ def run_fn(x: int):
 
 runs = [(1,)]
 
-runner = R.Runner(run_fn)
+runner = R.Runner(run_fn, R.RunnerConfig(working_dir="."))
 list(runner.local(runs))
 ```
 
