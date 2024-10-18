@@ -1,11 +1,8 @@
-import contextlib
-import copy
 import functools
 import logging
 import os
 import sys
 import uuid
-from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,11 +10,11 @@ from typing import ClassVar, Generic, TypeAlias, cast
 
 import nshconfig as C
 import nshsnap
-from typing_extensions import TypedDict, TypeVar, TypeVarTuple, Unpack
+from typing_extensions import TypeVar, TypeVarTuple, Unpack
 
 from . import _env
 from ._logging import PythonLoggingConfig, init_python_logging
-from ._seed import SeedConfig
+from ._seed import SeedConfig, seed_everything
 from ._submit import lsf, screen, slurm
 from ._util.env import _with_env
 from ._util.environment import (
@@ -27,12 +24,6 @@ from ._util.environment import (
     remove_wandb_environment_variables,
 )
 from ._util.git import _gitignored_dir
-from ._util.signal_handling import (
-    Signal,
-    SignalHandler,
-    SignalHandlers,
-    _with_signal_handlers,
-)
 
 log = logging.getLogger(__name__)
 
@@ -41,20 +32,6 @@ _Path: TypeAlias = str | Path | os.PathLike
 Snapshot: TypeAlias = bool | nshsnap.SnapshotConfig | nshsnap.SnapshotConfigKwargsDict
 
 DEFAULT_SNAPSHOT_KWARGS: nshsnap.SnapshotConfigKwargsDict = {}
-
-
-class RunInfo(TypedDict, total=False):
-    id: str
-    """The ID of the run."""
-
-    base_dir: _Path | None
-    """The base directory to save the run's files to."""
-
-    env: Mapping[str, str]
-    """Environment variables to set for the run."""
-
-    skip_python_logging: bool
-    """Whether to skip setting up Python logging for the run. Default: `False`."""
 
 
 TArguments = TypeVarTuple("TArguments")
@@ -77,24 +54,21 @@ class _Session:
 
 
 class RunnerConfig(C.Config):
-    savedir: _Path | None = None
+    working_dir: _Path
     """
-    The `savedir` parameter is a string that represents the directory where the program will save its execution files and logs.
+    The `working_dir` parameter is a string that represents the directory where the program will save its execution files and logs.
         This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
-        If `None`, this will default to the current working directory / `llrunner`.
+        If `None`, this will default to the current working directory / `nshrunner`.
     """
 
-    python_logging: PythonLoggingConfig = PythonLoggingConfig()
+    python_logging: PythonLoggingConfig | None = PythonLoggingConfig()
     """Logging configuration for the runner."""
 
-    seed: SeedConfig = SeedConfig(seed=0)
+    seed: SeedConfig | None = SeedConfig(seed=0)
     """Seed configuration for the runner."""
 
     env: Mapping[str, str] | None = None
     """Environment variables to set for the session."""
-
-    validate_no_duplicate_ids: bool = True
-    """Whether to validate that there are no duplicate IDs in the runs."""
 
     auto_snapshot_args_resolved_modules: bool = True
     """If enabled, `nshsnap` will automatically look through the function
@@ -113,36 +87,18 @@ def _tqdm_if_installed(iterable: Iterable[T], *args, **kwargs) -> Iterable[T]:
         return iterable
 
 
-def _wrap_run_fn(
-    config: RunnerConfig,
-    run_fn: Callable[[Unpack[TArguments]], TReturn],
-    info_fn: Callable[[Unpack[TArguments]], RunInfo],
-    validate_fns: Iterable[Callable[[Unpack[TArguments]], None]],
-    signal_handlers: Mapping[Signal, Sequence[SignalHandler]],
-):
+def _wrap_run_fn(config: RunnerConfig, run_fn: Callable[[Unpack[TArguments]], TReturn]):
     @functools.wraps(run_fn)
     def wrapped_run_fn(*args: Unpack[TArguments]) -> TReturn:
-        # Validate the configuration
-        for validate_fn in validate_fns:
-            validate_fn(*args)
-
-        # Get the run info
-        run_info = info_fn(*args)
-
         # Set up Python logging
-        if not run_info.get("skip_python_logging", False):
+        if config.python_logging is not None:
             init_python_logging(config.python_logging)
 
-        # Set additional environment variables
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(_with_env(run_info.get("env", {})))
+        # Seed
+        if config.seed is not None:
+            seed_everything(config.seed)
 
-            # Set up signal handlers
-            if signal_handlers:
-                stack.enter_context(_with_signal_handlers(signal_handlers))
-                # TODO: implement this function
-
-            return run_fn(*args)
+        return run_fn(*args)
 
     return wrapped_run_fn
 
@@ -165,132 +121,15 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
     def generate_id(self):
         return str(uuid.uuid4())
 
-    @classmethod
-    def default_info_fn(cls, *args: Unpack[TArguments]) -> RunInfo:
-        return {}
-
-    @classmethod
-    def default_validate_fn(cls, *args: Unpack[TArguments]) -> None:
-        pass
-
     def __init__(
-        self,
-        run_fn: Callable[[Unpack[TArguments]], TReturn],
-        config: RunnerConfig = RunnerConfig(),
-        *,
-        info_fn: Callable[[Unpack[TArguments]], RunInfo] | None = None,
-        validate_fn: Callable[[Unpack[TArguments]], None] | None = None,
-        transform_fns: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
-        | None = None,
-        signal_handlers: SignalHandlers | None = None,
+        self, run_fn: Callable[[Unpack[TArguments]], TReturn], config: RunnerConfig
     ):
         self.config = config
         self.run_fn = run_fn
-        self.info_fn = info_fn if info_fn is not None else self.default_info_fn
-        self.validate_fn = (
-            validate_fn if validate_fn is not None else self.default_validate_fn
-        )
-        self.transform_fns = transform_fns or []
-
-        self.signal_handlers = defaultdict[Signal, list[SignalHandler]](lambda: [])
-        if signal_handlers is not None:
-            for signal_name, handlers in signal_handlers.items():
-                for handler in handlers:
-                    self.signal_handlers[signal_name].append(handler)
-
-    def with_signal_handler(self, name: Signal, handler: SignalHandler):
-        runner = copy.deepcopy(self)
-        runner.signal_handlers[name].append(handler)
-        return runner
-
-    def transform_fn_generator(
-        self,
-        additional_transforms: list[
-            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]
-        ],
-    ):
-        yield from self.transform_fns
-        yield from additional_transforms
-
-    def _transform(
-        self,
-        *args: Unpack[TArguments],
-        additional_transforms: list[
-            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]
-        ],
-    ) -> tuple[Unpack[TArguments]]:
-        for transform_fn in self.transform_fn_generator(additional_transforms):
-            args = transform_fn(*copy.deepcopy(args))
-        return args
 
     @property
-    def _wrapped_run_fn(self) -> Callable[[Unpack[TArguments]], TReturn]:
-        return _wrap_run_fn(
-            self.config,
-            self.run_fn,
-            self.info_fn,
-            (self.validate_fn,),
-            self.signal_handlers,
-        )
-
-    def with_transform(
-        self,
-        transform_fn: Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]],
-    ):
-        runner = copy.deepcopy(self)
-        runner.transform_fns.append(transform_fn)
-        return runner
-
-    def _root_dir(self, runs: Iterable[tuple[Unpack[TArguments]]]):
-        # If the user has provided a `savedir`, use that as the base path.
-        if (savedir := self.config.savedir) is not None:
-            return _gitignored_dir(Path(savedir) / "nshrunner", create=True)
-
-        # If all configs have the same `project_root` config, use that instead.
-        project_root_paths = set(self.info_fn(*args).get("base_dir") for args in runs)
-        if (
-            project_root_paths
-            and len(project_root_paths) == 1
-            and (project_root_path := project_root_paths.pop()) is not None
-        ):
-            project_root_path = Path(project_root_path)
-        else:
-            project_root_path = Path.cwd()
-
-        return _gitignored_dir(project_root_path / "nshrunner", create=True)
-
-    def _session_dir(
-        self,
-        runs: Iterable[tuple[Unpack[TArguments]]],
-        id: str,
-    ):
-        root_dir = self._root_dir(runs)
-        return _gitignored_dir(root_dir / id, create=True)
-
-    def _resolve_runs(
-        self,
-        runs: Iterable[tuple[Unpack[TArguments]]],
-        additional_transforms: list[
-            Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]
-        ],
-    ):
-        # First, run all the transforms
-        runs = [
-            self._transform(*args, additional_transforms=additional_transforms)
-            for args in runs
-        ]
-
-        # Validate that there are no duplicate IDs
-        if self.config.validate_no_duplicate_ids:
-            ids = [
-                id_
-                for args in runs
-                if (id_ := self.info_fn(*args).get("id")) is not None
-            ]
-            if len(ids) != len(set(ids)):
-                raise ValueError("Duplicate IDs found in the runs.")
-
-        return runs
+    def _wrapped_run_fn(self):
+        return _wrap_run_fn(self.config, self.run_fn)
 
     def _setup_session(
         self,
@@ -299,17 +138,18 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         *,
         env: Mapping[str, str] | None,
         snapshot: Snapshot,
-        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]],
     ):
-        # Resolve all runs
-        runs = self._resolve_runs(runs, additional_transforms=transforms)
+        runs = list(runs)
 
         # Create id if not provided
         if id is None:
             id = self.generate_id()
 
         # Create the session directory
-        session_dir = self._session_dir(runs, id)
+        root_dir = _gitignored_dir(
+            Path(self.config.working_dir) / "nshrunner", create=True
+        )
+        session_dir = _gitignored_dir(root_dir / id, create=True)
 
         # Create the session object (to return)
         session = _Session(id=id, dir_path=session_dir)
@@ -362,16 +202,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs: Iterable[tuple[Unpack[TArguments]]],
         *,
         env: Mapping[str, str] | None = None,
-        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
-        | None = None,
     ):
-        runs, session = self._setup_session(
-            runs,
-            env=env,
-            snapshot=False,
-            transforms=transforms or [],
-        )
-
+        runs, session = self._setup_session(runs, env=env, snapshot=False)
         with _with_env(session.env):
             for args in _tqdm_if_installed(runs):
                 yield self._wrapped_run_fn(*args)
@@ -381,10 +213,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs: Iterable[tuple[Unpack[TArguments]]],
         *,
         env: Mapping[str, str] | None = None,
-        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
-        | None = None,
     ):
-        return list(self.local_generator(runs, env=env, transforms=transforms))
+        return list(self.local_generator(runs, env=env))
 
     @remove_nshrunner_environment_variables()
     @remove_lsf_environment_variables()
@@ -398,8 +228,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         snapshot: Snapshot,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
-        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
-        | None = None,
         activate_venv: bool = True,
         print_command: bool = True,
     ):
@@ -408,7 +236,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             runs,
             env=env,
             snapshot=snapshot,
-            transforms=transforms or [],
         )
         base_dir = session.dir_path / "submit"
         base_dir.mkdir(parents=True, exist_ok=True)
@@ -476,8 +303,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         snapshot: Snapshot,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
-        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
-        | None = None,
         activate_venv: bool = True,
         print_command: bool = True,
     ):
@@ -486,7 +311,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             runs,
             env=env,
             snapshot=snapshot,
-            transforms=transforms or [],
         )
         base_dir = session.dir_path / "submit"
         base_dir.mkdir(parents=True, exist_ok=True)
@@ -552,8 +376,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         snapshot: Snapshot,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
-        transforms: list[Callable[[Unpack[TArguments]], tuple[Unpack[TArguments]]]]
-        | None = None,
         activate_venv: bool = True,
         print_command: bool = True,
     ):
@@ -562,7 +384,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             runs,
             env=env,
             snapshot=snapshot,
-            transforms=transforms or [],
         )
         base_dir = session.dir_path / "submit"
         base_dir.mkdir(parents=True, exist_ok=True)
