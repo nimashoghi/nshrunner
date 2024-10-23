@@ -55,8 +55,8 @@ class _Session:
     """The snapshot information for the session."""
 
 
-class RunnerConfig(C.Config):
-    working_dir: _Path
+class Config(C.Config):
+    working_dir: _Path | None = None
     """
     The `working_dir` parameter is a string that represents the directory where the program will save its execution files and logs.
         This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
@@ -89,7 +89,7 @@ def _tqdm_if_installed(iterable: Iterable[T], *args, **kwargs) -> Iterable[T]:
         return iterable
 
 
-def _wrap_run_fn(config: RunnerConfig, run_fn: Callable[[Unpack[TArguments]], TReturn]):
+def _wrap_run_fn(config: Config, run_fn: Callable[[Unpack[TArguments]], TReturn]):
     @functools.wraps(run_fn)
     def wrapped_run_fn(*args: Unpack[TArguments]) -> TReturn:
         # Set up Python logging
@@ -118,13 +118,13 @@ def _shell_hook(env_path: Path):
 
 
 class Runner(Generic[TReturn, Unpack[TArguments]]):
-    Config: ClassVar = RunnerConfig
-
     def generate_id(self):
         return str(uuid.uuid4())
 
     def __init__(
-        self, run_fn: Callable[[Unpack[TArguments]], TReturn], config: RunnerConfig
+        self,
+        run_fn: Callable[[Unpack[TArguments]], TReturn],
+        config: Config = Config(),
     ):
         self.config = config
         self.run_fn = run_fn
@@ -148,9 +148,9 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             id = self.generate_id()
 
         # Create the session directory
-        root_dir = _gitignored_dir(
-            Path(self.config.working_dir) / "nshrunner", create=True
-        )
+        if (working_dir := self.config.working_dir) is None:
+            working_dir = Path.cwd()
+        root_dir = _gitignored_dir(Path(working_dir) / "nshrunner", create=True)
         session_dir = _gitignored_dir(root_dir / id, create=True)
 
         # Create the session object (to return)

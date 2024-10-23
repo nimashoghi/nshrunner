@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 # Config/alias imports
 
 if TYPE_CHECKING:
+    from nshrunner._runner import Config as Config
     from nshrunner._runner import PythonLoggingConfig as PythonLoggingConfig
-    from nshrunner._runner import RunnerConfig as RunnerConfig
     from nshrunner._runner import SeedConfig as SeedConfig
 else:
 
