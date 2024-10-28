@@ -72,9 +72,12 @@ class Config(C.Config):
     env: Mapping[str, str] | None = None
     """Environment variables to set for the session."""
 
-    auto_snapshot_args_resolved_modules: bool = True
+    auto_snapshot_args_resolved_modules: bool = False
     """If enabled, `nshsnap` will automatically look through the function
     arguments and snapshot any third-party modules that are resolved."""
+
+    auto_snapshot_editable: bool = True
+    """If enabled, `nshsnap` will automatically snapshot any editable packages."""
 
 
 T = TypeVar("T", infer_variance=True)
@@ -185,6 +188,10 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             # Automatically snapshot any third-party modules that are resolved
             if self.config.auto_snapshot_args_resolved_modules:
                 snapshot = snapshot.with_resolved_modules(*runs)
+
+            # Automatically snapshot any editable packages
+            if self.config.auto_snapshot_editable:
+                snapshot = snapshot.with_editable_modules()
 
             session.snapshot = nshsnap.snapshot(snapshot)
             snapshot_path_str = str(session.snapshot.snapshot_dir.absolute())
