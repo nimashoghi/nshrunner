@@ -76,7 +76,7 @@ class Config(C.Config):
     """If enabled, `nshsnap` will automatically look through the function
     arguments and snapshot any third-party modules that are resolved."""
 
-    auto_snapshot_editable: bool = True
+    auto_snapshot_editable: bool = False
     """If enabled, `nshsnap` will automatically snapshot any editable packages."""
 
 
