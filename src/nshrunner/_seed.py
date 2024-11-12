@@ -27,7 +27,9 @@ class SeedConfig(C.Config):
 def seed_everything(config: SeedConfig):
     # If Lightning's seed_everything is not available, we just use own implementation
     if LS is not None:
-        return LS.seed_everything(config.seed, workers=config.seed_workers)
+        seed = LS.seed_everything(config.seed, workers=config.seed_workers)
+        log.critical(f"Set global seed to {config.seed}.")
+        return seed
 
     # First, set `random` seed
     import random
@@ -54,3 +56,4 @@ def seed_everything(config: SeedConfig):
     os.environ["PL_SEED_WORKERS"] = str(int(config.seed_workers))
 
     log.critical(f"Set global seed to {config.seed}.")
+    return config.seed
