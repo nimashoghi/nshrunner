@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from deepmerge import always_merger
-from typing_extensions import TypeAlias, TypedDict
+from typing_extensions import TypeAliasType, TypedDict
 
 from .. import _env
 from ._util import (
@@ -24,23 +24,25 @@ from ._util import (
 
 log = logging.getLogger(__name__)
 
-
-_Path: TypeAlias = str | Path | os.PathLike
-MailType: TypeAlias = Literal[
-    "NONE",
-    "BEGIN",
-    "END",
-    "FAIL",
-    "REQUEUE",
-    "ALL",
-    "INVALID_DEPEND",
-    "STAGE_OUT",
-    "TIME_LIMIT",
-    "TIME_LIMIT_90",
-    "TIME_LIMIT_80",
-    "TIME_LIMIT_50",
-    "ARRAY_TASKS",
-]
+_Path = TypeAliasType("_Path", str | Path | os.PathLike)
+MailType = TypeAliasType(
+    "MailType",
+    Literal[
+        "NONE",
+        "BEGIN",
+        "END",
+        "FAIL",
+        "REQUEUE",
+        "ALL",
+        "INVALID_DEPEND",
+        "STAGE_OUT",
+        "TIME_LIMIT",
+        "TIME_LIMIT_90",
+        "TIME_LIMIT_80",
+        "TIME_LIMIT_50",
+        "ARRAY_TASKS",
+    ],
+)
 
 
 class SlurmJobKwargs(TypedDict, total=False):

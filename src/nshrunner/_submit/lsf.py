@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from deepmerge import always_merger
-from typing_extensions import TypeAlias, TypedDict
+from typing_extensions import TypeAliasType, TypedDict
 
 from .. import _env
 from ._util import (
@@ -22,9 +22,7 @@ from ._util import (
 )
 
 log = logging.getLogger(__name__)
-
-
-_Path: TypeAlias = str | Path | os.PathLike
+_Path = TypeAliasType("_Path", str | Path | os.PathLike)
 
 
 class LSFJobKwargs(TypedDict, total=False):

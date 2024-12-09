@@ -5,15 +5,22 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, cast
+from typing import Any, Literal, cast
 
 import cloudpickle
-from typing_extensions import Required, TypedDict, TypeVarTuple, Unpack, override
+from typing_extensions import (
+    Required,
+    TypeAliasType,
+    TypedDict,
+    TypeVarTuple,
+    Unpack,
+    override,
+)
 
 from .. import _env
 from ._util import SerializedFunctionCallDict
 
-_Path: TypeAlias = str | Path | PathLike
+_Path = TypeAliasType("_Path", str | Path | PathLike)
 
 
 def _runner_name():

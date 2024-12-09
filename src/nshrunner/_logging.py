@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, TypeAlias
+from typing import Literal
 
 import nshconfig as C
 import nshutils
+from typing_extensions import TypeAliasType
 
-LogLevel: TypeAlias = Literal[
-    "CRITICAL", "FATAL", "ERROR", "WARN", "WARNING", "INFO", "DEBUG"
-]
+LogLevel = TypeAliasType(
+    "LogLevel",
+    Literal["CRITICAL", "FATAL", "ERROR", "WARN", "WARNING", "INFO", "DEBUG"],
+)
 
 
 class PythonLoggingConfig(C.Config):
