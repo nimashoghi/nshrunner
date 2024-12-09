@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -91,7 +93,7 @@ def remove_wandb_environment_variables():
 
 
 @contextmanager
-def remove_nshrunner_environment_variables():
+def remove_nshrunner_environment_variables() -> Generator[None, Any, None]:
     """
     Similar to above, but removes all "NSHRUNNER_" environment variables.
     """

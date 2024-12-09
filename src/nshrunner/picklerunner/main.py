@@ -7,13 +7,14 @@ import os
 from collections.abc import Mapping, Sequence
 from os import PathLike
 from pathlib import Path
-from typing import TypeAlias, cast
+from typing import cast
 
 import cloudpickle
+from typing_extensions import TypeAliasType
 
 from ._util import SerializedFunctionCallDict
 
-_Path: TypeAlias = str | Path | PathLike
+_Path = TypeAliasType("_Path", str | Path | PathLike)
 
 
 def _execute_single(path: _Path):

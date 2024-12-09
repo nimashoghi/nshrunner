@@ -6,7 +6,7 @@ from collections.abc import Mapping
 
 
 @contextlib.contextmanager
-def _with_env(env: Mapping[str, str]):
+def with_env(env: Mapping[str, str]):
     env_old = {k: os.environ.get(k, None) for k in env}
     os.environ.update(env)
     try:

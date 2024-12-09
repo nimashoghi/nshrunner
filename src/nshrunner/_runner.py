@@ -8,17 +8,17 @@ import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, Generic, TypeAlias, cast
+from typing import Generic, cast
 
 import nshconfig as C
 import nshsnap
-from typing_extensions import TypeVar, TypeVarTuple, Unpack
+from typing_extensions import TypeAliasType, TypeVar, TypeVarTuple, Unpack
 
 from . import _env
 from ._logging import PythonLoggingConfig, init_python_logging
 from ._seed import SeedConfig, seed_everything
 from ._submit import lsf, screen, slurm
-from ._util.env import _with_env
+from ._util.env import with_env
 from ._util.environment import (
     remove_lsf_environment_variables,
     remove_nshrunner_environment_variables,
@@ -29,9 +29,11 @@ from ._util.git import _gitignored_dir
 
 log = logging.getLogger(__name__)
 
+_Path = TypeAliasType("_Path", str | Path | os.PathLike)
+Snapshot = TypeAliasType(
+    "Snapshot", bool | nshsnap.SnapshotConfig | nshsnap.SnapshotConfigKwargsDict
+)
 
-_Path: TypeAlias = str | Path | os.PathLike
-Snapshot: TypeAlias = bool | nshsnap.SnapshotConfig | nshsnap.SnapshotConfigKwargsDict
 
 DEFAULT_SNAPSHOT_KWARGS: nshsnap.SnapshotConfigKwargsDict = {}
 
@@ -213,7 +215,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         env: Mapping[str, str] | None = None,
     ):
         runs, session = self._setup_session(runs, env=env, snapshot=False)
-        with _with_env(session.env):
+        with with_env(session.env):
             for args in _tqdm_if_installed(runs):
                 yield self._wrapped_run_fn(*args)
 
