@@ -17,6 +17,7 @@ deepmerge = "*"
 nshconfig = "*"
 nshutils = "*"
 nshsnap = "*"
+strenum = "*"
 
 [tool.poetry.scripts]
 nshrunner-picklerunner = "nshrunner.picklerunner.main:main"

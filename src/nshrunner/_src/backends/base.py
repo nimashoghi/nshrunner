@@ -5,6 +5,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+from strenum import StrEnum
+
 from ..picklerunner import SerializedArgs, SerializedCallable
 
 
@@ -14,19 +16,31 @@ class JobInfo:
     """The job ID."""
 
 
+class JobStatus(StrEnum):
+    COMPLETED = "COMPLETED"
+    """The job has completed successfully."""
+
+    RUNNING = "RUNNING"
+    """The job is currently running."""
+
+    FAILED = "FAILED"
+    """The job has failed."""
+
+
 @dataclass(frozen=True)
-class JobStatus:
+class JobStatusInfo:
     """Represents the status of a job."""
 
-    status: str
+    status: JobStatus
     """The job status."""
 
-    description: str = ""
+    description: str | None = None
     """Any additional information about the job status."""
 
 
 @runtime_checkable
 class Job(Protocol):
+    @property
     def info(self) -> JobInfo:
         """Get information about the job.
 
@@ -37,7 +51,7 @@ class Job(Protocol):
         """
         ...
 
-    def status(self) -> JobStatus:
+    def status(self) -> JobStatusInfo:
         """Get the status of the job.
 
         Returns
@@ -60,12 +74,20 @@ class Job(Protocol):
 
 class BaseBackend(ABC):
     @abstractmethod
-    def execute_parallel(
+    def execute(
         self,
         fn: SerializedCallable,
         args: Sequence[SerializedArgs],
     ) -> Any:
-        """Execute a serialized callable with multiple arguments in parallel.
+        """Execute a serialized callable with multiple arguments in parallel. In
+        Python, this would translate to:
+
+        ```python
+        import multiprocessing as mp
+
+        with mp.Pool() as pool:
+            results = pool.starmap(fn, args)
+        ```
 
         This method should be implemented by subclasses to define how a
         serialized callable should be executed in parallel with multiple sets
@@ -82,57 +104,10 @@ class BaseBackend(ABC):
         -------
         Any
             The results of executing the callable with the provided arguments
-        """
-        ...
 
-    @abstractmethod
-    def execute_single(
-        self,
-        fn: SerializedCallable,
-        args: SerializedArgs,
-    ) -> Any:
-        """Execute a serialized callable with a single set of arguments.
-
-        This method should be implemented by subclasses to define how a
-        serialized callable should be executed with a single set of
-        serialized arguments.
-
-        Parameters
-        ----------
-        fn : SerializedCallable
-            The serialized callable to be executed
-        args : SerializedArgs
-            The serialized arguments to pass to the callable
-
-        Returns
-        -------
-        Any
-            The result of executing the callable with the provided arguments
-        """
-        ...
-
-    @abstractmethod
-    def execute_sequential(
-        self,
-        fn: SerializedCallable,
-        args: Sequence[SerializedArgs],
-    ) -> Any:
-        """Execute a serialized callable with multiple arguments sequentially.
-
-        This method should be implemented by subclasses to define how a
-        serialized callable should be executed sequentially with multiple sets
-        of serialized arguments.
-
-        Parameters
-        ----------
-        fn : SerializedCallable
-            The serialized callable to be executed
-        args : Sequence[SerializedArgs]
-            A sequence of serialized arguments to be processed sequentially
-
-        Returns
-        -------
-        Any
-            The results of executing the callable with the provided arguments
+        Notes
+        -----
+        Implementations that do not support parallel execution should raise an
+        exception if `len(args) > 1`.
         """
         ...
