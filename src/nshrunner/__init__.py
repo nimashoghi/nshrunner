@@ -14,3 +14,8 @@ from ._runner import Snapshot as Snapshot
 from .session import Session as Session
 
 _ = RunnerConfig
+
+try:
+    from . import configs as configs
+except ImportError:
+    configs = None
