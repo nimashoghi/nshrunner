@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 import cloudpickle
+import nshconfig as C
 from typing_extensions import override
 
 from ..picklerunner import SerializedArgs, SerializedCallable, execute
-from .base import BaseBackend, Job, JobInfo, JobStatus, JobStatusInfo
+from .base import BaseBackend, BaseBackendConfig, Job, JobInfo, JobStatus, JobStatusInfo
 
 
 class ScreenJob(Job):
@@ -55,6 +56,10 @@ class ScreenJob(Job):
         return results
 
 
+class ScreenBackendConfig(BaseBackendConfig):
+    pass
+
+
 class ScreenBackend(BaseBackend):
     """
     ScreenBackend executes jobs using GNU screen. It handles serialization of the function
@@ -71,10 +76,10 @@ class ScreenBackend(BaseBackend):
         self._python = python_executable
 
     @override
-    def execute(
+    def execute_impl(
         self,
         fn: SerializedCallable,
-        args: Sequence[SerializedArgs],
+        args_list: Sequence[SerializedArgs],
     ) -> Job:
         """
         Execute multiple jobs in parallel. For simplicity, we launch multiple screen sessions,
@@ -88,7 +93,7 @@ class ScreenBackend(BaseBackend):
         # Results from each job are collected and stored as a list.
         # We'll have each job write its result to a temporary file, and then combine them.
         partial_results = []
-        for i, arg in enumerate(args):
+        for i, arg in enumerate(args_list):
             partial_id = f"{job_id}_{i}"
             partial_dir = job_dir / f"task_{i}"
             partial_dir.mkdir()
@@ -131,7 +136,7 @@ class ScreenBackend(BaseBackend):
             check=True,
         )
 
-        return ScreenJob(job_id=job_id, work_dir=job_dir, num_tasks=len(args))
+        return ScreenJob(job_id=job_id, work_dir=job_dir, num_tasks=len(args_list))
 
     def execute_single(
         self,
