@@ -13,10 +13,10 @@ from typing_extensions import TypeAliasType, TypedDict
 from .. import _env
 from ._util import (
     Submission,
-    _emit_on_exit_commands,
-    _set_default_envs,
-    _write_run_metadata_commands,
-    _write_submission_meta,
+    emit_on_exit_commands,
+    set_default_envs,
+    write_run_metadata_commands,
+    write_submission_meta,
 )
 
 log = logging.getLogger(__name__)
@@ -176,7 +176,7 @@ def _write_batch_script_to_file(
             # Basically, this just emits bash code that iterates
             # over all files in the exit script directory and runs them
             # in a subshell.
-            _emit_on_exit_commands(f, exit_script_dir)
+            emit_on_exit_commands(f, exit_script_dir)
 
 
 def update_options(kwargs_in: ScreenJobKwargs, base_dir: Path):
@@ -200,7 +200,7 @@ def update_options(kwargs_in: ScreenJobKwargs, base_dir: Path):
         kwargs["error_file"] = base_dir / "error.log"
 
     # Set the default environment variables
-    kwargs["environment"] = _set_default_envs(
+    kwargs["environment"] = set_default_envs(
         kwargs.get("environment"),
         job_index=None,
         local_rank="0",
@@ -213,11 +213,11 @@ def update_options(kwargs_in: ScreenJobKwargs, base_dir: Path):
 
     # Emit the setup commands for run metadata
     if kwargs.get("emit_metadata"):
-        kwargs["setup_commands"] = _write_run_metadata_commands(
+        kwargs["setup_commands"] = write_run_metadata_commands(
             kwargs.get("setup_commands"),
             is_worker_script=True,
         )
-        kwargs["submission_script_setup_commands"] = _write_run_metadata_commands(
+        kwargs["submission_script_setup_commands"] = write_run_metadata_commands(
             kwargs.get("submission_script_setup_commands"),
             is_worker_script=False,
         )
@@ -276,7 +276,7 @@ def to_array_batch_script(
 
     # Write the submission information to a JSON file
     if config.get("emit_metadata"):
-        _write_submission_meta(
+        write_submission_meta(
             script_path.parent,
             command=command,
             script_path=script_path,

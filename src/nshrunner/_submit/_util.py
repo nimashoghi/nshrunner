@@ -24,7 +24,7 @@ class Submission:
         return " ".join(self.command_parts)
 
 
-def _write_submission_meta(
+def write_submission_meta(
     submit_dir: Path,
     *,
     command: str,
@@ -51,7 +51,7 @@ def _write_submission_meta(
         )
 
 
-def _set_default_envs(
+def set_default_envs(
     existing_env: Mapping[str, str] | None,
     /,
     *,
@@ -89,7 +89,7 @@ def _set_default_envs(
     return {**env, **(existing_env or {})}
 
 
-def _write_run_metadata_commands(
+def write_run_metadata_commands(
     setup_commands: Sequence[str] | None,
     *,
     is_worker_script: bool = False,
@@ -169,7 +169,7 @@ for script in "${{exit_scripts[@]}}"; do
 done""".strip()
 
 
-def _emit_on_exit_commands(f: TextIOWrapper, exit_script_dir: Path):
+def emit_on_exit_commands(f: TextIOWrapper, exit_script_dir: Path):
     # Add the on-exit script support
     # Basically, this just emits bash code that iterates
     # over all files in the exit script directory and runs them
