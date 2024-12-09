@@ -18,11 +18,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Execute pickled Python functions")
     parser.add_argument("fn_path", type=Path, help="Path to pickled function")
     parser.add_argument("args_path", type=Path, help="Path to pickled arguments")
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        help="Path to save the result (default: do not save)",
+        required=False,
+    )
 
     args = parser.parse_args()
 
     try:
-        result = execute(args.fn_path, args.args_path)
+        result = execute(
+            args.fn_path,
+            args.args_path,
+            save_path=args.output,
+        )
         print(f"Result: {result}")
         return 0
     except Exception as e:

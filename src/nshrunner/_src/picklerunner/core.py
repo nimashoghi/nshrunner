@@ -77,8 +77,12 @@ def save_function_call(
         raise PickleRunnerError(f"Error saving function and args: {e}") from e
 
 
-def execute(fn_path: Path, args_path: Path) -> Any:
-    """Execute a pickled function with the given pickled arguments.
+def execute(
+    fn_path: Path,
+    args_path: Path,
+    save_path: Path | None = None,
+) -> Any:
+    """Execute a pickled function with the given pickled arguments and save the result.
 
     Parameters
     ----------
@@ -86,16 +90,18 @@ def execute(fn_path: Path, args_path: Path) -> Any:
         Path to the pickled function
     args_path : Path
         Path to the pickled arguments
+    save_path : Path, optional
+        Path to save the result, by default None
 
     Returns
     -------
     Any
-        Result of executing the function
+        The result of the function call.
 
     Raises
     ------
     PickleRunnerError
-        If there are issues loading or executing the pickled function/args
+        If there are issues loading, executing, or saving results
     """
     try:
         with fn_path.open("rb") as f:
@@ -104,7 +110,14 @@ def execute(fn_path: Path, args_path: Path) -> Any:
         with args_path.open("rb") as f:
             args_data = cloudpickle.load(f)
 
-        return fn(*args_data["args"], **args_data["kwargs"])
+        result = fn(*args_data["args"], **args_data["kwargs"])
+
+        # Save the result
+        if save_path is not None:
+            with save_path.open("wb") as f:
+                cloudpickle.dump(result, f)
+
+        return result
 
     except Exception as e:
         raise PickleRunnerError(f"Error executing pickled function: {e}") from e
@@ -147,6 +160,23 @@ class PickledFunctionCall:
     fn: SerializedCallable
     args: SerializedArgs
 
-    def execute(self) -> Any:
-        """Execute this function call using the pickled function and arguments."""
-        return execute(self.fn.path, self.args.path)
+    def execute(self, save_path: Path | None = None) -> Any:
+        """
+        Execute this function call using the pickled function and arguments.
+
+        Parameters
+        ----------
+        save_path : Path, optional
+            Path to save the result, by default None
+
+        Returns
+        -------
+
+        Any
+            The result of the function call.
+        """
+        return execute(
+            self.fn.path,
+            self.args.path,
+            save_path=save_path,
+        )
