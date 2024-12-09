@@ -17,10 +17,9 @@ from typing_extensions import TypeAliasType, TypeVar, TypeVarTuple, Unpack
 from . import _env
 from ._logging import PythonLoggingConfig, init_python_logging
 from ._seed import SeedConfig, seed_everything
-from ._submit import lsf, screen, slurm
+from ._submit import screen, slurm
 from ._util.env import with_env
 from ._util.environment import (
-    remove_lsf_environment_variables,
     remove_nshrunner_environment_variables,
     remove_slurm_environment_variables,
     remove_wandb_environment_variables,
@@ -360,79 +359,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         # Create the submission script
         submission = slurm.to_array_batch_script(
-            command,
-            script_path=base_dir / "submit.sh",
-            num_jobs=len(runs),
-            config=options,
-            env=env,
-        )
-
-        # Print the full command so the user can copy-paste it
-        if print_command:
-            log.critical("Run the following command to submit the jobs:\n\n")
-            # We print the command but log the rest so the user can pipe the command to bash
-            print(f"{submission.command_str}\n\n")
-
-        return submission
-
-    @remove_nshrunner_environment_variables()
-    @remove_lsf_environment_variables()
-    @remove_slurm_environment_variables()
-    @remove_wandb_environment_variables()
-    def submit_lsf(
-        self,
-        runs: Iterable[tuple[Unpack[TArguments]]],
-        options: lsf.LSFJobKwargs,
-        *,
-        snapshot: Snapshot,
-        setup_commands: Sequence[str] | None = None,
-        env: Mapping[str, str] | None = None,
-        activate_venv: bool = True,
-        print_command: bool = True,
-    ):
-        # Resolve all runs
-        runs, session = self._setup_session(
-            runs,
-            env=env,
-            snapshot=snapshot,
-        )
-        base_dir = session.dir_path / "submit"
-        base_dir.mkdir(parents=True, exist_ok=True)
-
-        # Update the LSF options
-        options = lsf.update_options(options, base_dir)
-
-        # Use setup commands to directly put env/pythonpath into the session bash script
-        setup_commands_pre: list[str] = []
-        if activate_venv:
-            setup_commands_pre.append("echo 'Activating environment'")
-            setup_commands_pre.append(_shell_hook(Path(sys.prefix)))
-
-        # Merge the setup commands
-        setup_commands = (
-            setup_commands_pre
-            + list(setup_commands or [])
-            + list(options.get("setup_commands", []))
-        )
-        del setup_commands_pre
-
-        # Merge the environment
-        env = {**session.env, **options.get("environment", {})}
-
-        # Convert runs to commands using picklerunner
-        from .picklerunner.create import callable_to_command
-
-        command = callable_to_command(
-            base_dir / "worker.sh",
-            self._wrapped_run_fn,
-            runs,
-            environment={**session.env, **options.get("environment", {})},
-            setup_commands=setup_commands,
-            execution={"mode": "array"},
-        )
-
-        # Create the submission script
-        submission = lsf.to_array_batch_script(
             command,
             script_path=base_dir / "submit.sh",
             num_jobs=len(runs),

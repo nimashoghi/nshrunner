@@ -43,32 +43,6 @@ def remove_slurm_environment_variables():
 
 
 @contextmanager
-def remove_lsf_environment_variables():
-    """Same as above, but for the LSF task scheduler."""
-    removed_env_vars = {}
-    for key in list(os.environ.keys()):
-        if (
-            not key.startswith("LS_")
-            and not key.startswith("LSF_")
-            and not key.startswith("LSB_")
-            and not key.startswith("BSUB_")
-        ):
-            continue
-        removed_env_vars[key] = os.environ.pop(key)
-
-    log.debug(
-        f"Removed environment variables before launching new job: {list(removed_env_vars.keys())}"
-    )
-    try:
-        yield
-    finally:
-        os.environ.update(removed_env_vars)
-        log.debug(
-            f"Restored environment variables after launching new job: {list(removed_env_vars.keys())}"
-        )
-
-
-@contextmanager
 def remove_wandb_environment_variables():
     """
     Similar to above, but removes all "WANDB_" environment variables.
