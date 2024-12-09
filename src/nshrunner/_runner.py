@@ -227,7 +227,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         return list(self.local_generator(runs, env=env))
 
     @remove_nshrunner_environment_variables()
-    @remove_lsf_environment_variables()
     @remove_slurm_environment_variables()
     @remove_wandb_environment_variables()
     def session(
@@ -302,7 +301,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         return submission
 
     @remove_nshrunner_environment_variables()
-    @remove_lsf_environment_variables()
     @remove_slurm_environment_variables()
     @remove_wandb_environment_variables()
     def submit_slurm(

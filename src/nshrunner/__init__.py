@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from nshsnap import SnapshotConfig as SnapshotConfig
 from nshsnap import load_existing_snapshot as load_existing_snapshot
 from nshsnap import snapshot as snapshot
@@ -13,9 +15,10 @@ from ._runner import SeedConfig as SeedConfig
 from ._runner import Snapshot as Snapshot
 from .session import Session as Session
 
-_ = RunnerConfig
+if TYPE_CHECKING:
+    _ = RunnerConfig
 
 try:
     from . import configs as configs
-except ImportError:
+except:
     configs = None

@@ -2,9 +2,9 @@
     "module": "nshrunner",
     "output": "configs",
     "typed_dicts": {
-        "nshrunner._seed.SeedConfig": "configs/wrapper_fns/SeedConfig_typed_dict.py",
         "nshrunner._runner.Config": "configs/wrapper_fns/Config_typed_dict.py",
-        "nshrunner._logging.PythonLoggingConfig": "configs/wrapper_fns/PythonLoggingConfig_typed_dict.py"
+        "nshrunner._logging.PythonLoggingConfig": "configs/_logging/PythonLoggingConfig_typed_dict.py",
+        "nshrunner._seed.SeedConfig": "configs/_runner/SeedConfig_typed_dict.py"
     },
     "json_schemas": null
 }
