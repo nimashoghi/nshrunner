@@ -2,9 +2,9 @@ from __future__ import annotations
 
 __codegen__ = True
 
-from nshrunner._runner import Config as Config
-from nshrunner._runner import PythonLoggingConfig as PythonLoggingConfig
-from nshrunner._runner import SeedConfig as SeedConfig
+from nshrunner.wrapper_fns import Config as Config
+from nshrunner.wrapper_fns import PythonLoggingConfig as PythonLoggingConfig
+from nshrunner.wrapper_fns import SeedConfig as SeedConfig
 
 from .Config_typed_dict import ConfigTypedDict as ConfigTypedDict
 from .Config_typed_dict import CreateConfig as CreateConfig
