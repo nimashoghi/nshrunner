@@ -86,13 +86,13 @@ class SlurmMailConfig(typ.TypedDict, total=False):
 class SlurmResourcesConfig(typ.TypedDict):
     """Configuration for computational resources."""
 
-    cpus: int
+    cpus_per_task: int
     """Number of CPUs per task."""
 
-    gpus: int
+    gpus_per_node: int
     """Number of GPUs required per node. Set to 0 for CPU-only jobs."""
 
-    memory_gb: float
+    memory_gb_per_node: float
     """Memory required in gigabytes."""
 
     nodes: int
@@ -100,6 +100,15 @@ class SlurmResourcesConfig(typ.TypedDict):
 
     time: str
     """Maximum wall time for the job. Job will be terminated after this duration."""
+
+    qos: typ.NotRequired[str | None]
+    """Quality of Service (QoS) level for the job. Controls priority and resource limits."""
+
+    constraint: typ.NotRequired[str | list[str] | None]
+    """Node constraints for job allocation. Can be a single constraint or list of constraints
+    
+    These constraints can be features defined by the SLURM administrator that are required for the job.
+    Multiple constraints are combined using logical AND."""
 
 
 # Schema entries
@@ -120,24 +129,24 @@ class SlurmBackendConfigTypedDict(typ.TypedDict, total=False):
     - cpu: For CPU-only jobs
     - debug: For short test runs."""
 
-    qos: str | None
-    """Quality of Service (QoS) level for the job. Controls priority and resource limits."""
-
     resources: typ.Required[SlurmResourcesConfig]
     """Resource requirements for the job including CPU, GPU, memory, and time limits."""
 
-    output_dir: typ.Required[str]
+    output_dir: str | None
     """Directory where SLURM output and error files will be written
     
     Files will be named using SLURM job variables:
     - %j: Job ID
-    - %a: Array task ID (for job arrays)."""
+    - %a: Array task ID (for job arrays)
+    
+    If None, `nshrunner` will automatically set the output directory based on the
+    provided working directory."""
 
     mail: SlurmMailConfig | None
     """Email notification settings. If None, no emails will be sent."""
 
-    timeout_min: int
-    """Minutes before job end to send timeout signal, allowing graceful shutdown."""
+    timeout_delay: str
+    """Duration before job end to send timeout signal, allowing graceful shutdown."""
 
     timeout_signal: Signals
     """Signal to send when job approaches time limit

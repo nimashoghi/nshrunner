@@ -12,13 +12,13 @@ import nshconfig as C
 class SlurmResourcesConfig(C.Config):
     """Configuration for computational resources"""
 
-    cpus: int
+    cpus_per_task: int
     """Number of CPUs per task"""
 
-    gpus: int
+    gpus_per_node: int
     """Number of GPUs required per node. Set to 0 for CPU-only jobs"""
 
-    memory_gb: float
+    memory_gb_per_node: float
     """Memory required in gigabytes"""
 
     nodes: int
@@ -26,6 +26,16 @@ class SlurmResourcesConfig(C.Config):
 
     time: timedelta
     """Maximum wall time for the job. Job will be terminated after this duration"""
+
+    qos: str | None = None
+    """Quality of Service (QoS) level for the job. Controls priority and resource limits"""
+
+    constraint: str | Sequence[str] | None = None
+    """Node constraints for job allocation. Can be a single constraint or list of constraints
+
+    These constraints can be features defined by the SLURM administrator that are required for the job.
+    Multiple constraints are combined using logical AND.
+    """
 
 
 class SlurmMailConfig(C.Config):
@@ -80,27 +90,27 @@ class SlurmBackendConfig(C.Config):
     - debug: For short test runs
     """
 
-    qos: str | None = None
-    """Quality of Service (QoS) level for the job. Controls priority and resource limits"""
-
     resources: SlurmResourcesConfig
     """Resource requirements for the job including CPU, GPU, memory, and time limits"""
 
-    output_dir: Path
+    output_dir: Path | None = None
     """Directory where SLURM output and error files will be written
 
     Files will be named using SLURM job variables:
     - %j: Job ID
     - %a: Array task ID (for job arrays)
+
+    If None, `nshrunner` will automatically set the output directory based on the
+    provided working directory.
     """
 
     mail: SlurmMailConfig | None = None
     """Email notification settings. If None, no emails will be sent"""
 
-    timeout_min: int = 2
-    """Minutes before job end to send timeout signal, allowing graceful shutdown"""
+    timeout_delay: timedelta = timedelta(minutes=2)
+    """Duration before job end to send timeout signal, allowing graceful shutdown"""
 
-    timeout_signal: signal.Signals = signal.SIGTERM
+    timeout_signal: signal.Signals = signal.SIGURG
     """Signal to send when job approaches time limit
 
     Common values:
@@ -125,25 +135,29 @@ class SlurmBackendConfig(C.Config):
         kwargs: SlurmJobKwargs = {
             "name": self.name,
             "nodes": self.resources.nodes,
-            "cpus_per_task": self.resources.cpus,
-            "memory_mb": int(self.resources.memory_gb * 1024),
+            "cpus_per_task": self.resources.cpus_per_task,
+            "memory_mb": int(self.resources.memory_gb_per_node * 1024),
             "time": self.resources.time,
             "timeout_signal": self.timeout_signal,
-            "timeout_signal_delay": timedelta(minutes=self.timeout_min),
+            "timeout_signal_delay": self.timeout_delay,
             "exclusive": self.exclusive,
-            "output_file": self.output_dir / "%j-%a.out",
-            "error_file": self.output_dir / "%j-%a.err",
         }
+
+        if self.output_dir is not None:
+            kwargs["output_file"] = self.output_dir / "%j-%a.out"
+            kwargs["error_file"] = self.output_dir / "%j-%a.err"
 
         if self.account is not None:
             kwargs["account"] = self.account
         if self.partition is not None:
             kwargs["partition"] = self.partition
-        if self.qos is not None:
-            kwargs["qos"] = self.qos
+        if self.resources.qos is not None:
+            kwargs["qos"] = self.resources.qos
+        if self.resources.constraint is not None:
+            kwargs["constraint"] = self.resources.constraint
 
-        if self.resources.gpus > 0:
-            kwargs["gres"] = f"gpu:{self.resources.gpus}"
+        if self.resources.gpus_per_node > 0:
+            kwargs["gres"] = f"gpu:{self.resources.gpus_per_node}"
 
         if self.mail is not None:
             kwargs["mail_user"] = self.mail.user

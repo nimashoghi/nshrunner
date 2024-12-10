@@ -15,13 +15,13 @@ __codegen__ = True
 class SlurmResourcesConfigTypedDict(typ.TypedDict):
     """Configuration for computational resources."""
 
-    cpus: int
+    cpus_per_task: int
     """Number of CPUs per task."""
 
-    gpus: int
+    gpus_per_node: int
     """Number of GPUs required per node. Set to 0 for CPU-only jobs."""
 
-    memory_gb: float
+    memory_gb_per_node: float
     """Memory required in gigabytes."""
 
     nodes: int
@@ -29,6 +29,15 @@ class SlurmResourcesConfigTypedDict(typ.TypedDict):
 
     time: str
     """Maximum wall time for the job. Job will be terminated after this duration."""
+
+    qos: typ.NotRequired[str | None]
+    """Quality of Service (QoS) level for the job. Controls priority and resource limits."""
+
+    constraint: typ.NotRequired[str | list[str] | None]
+    """Node constraints for job allocation. Can be a single constraint or list of constraints
+    
+    These constraints can be features defined by the SLURM administrator that are required for the job.
+    Multiple constraints are combined using logical AND."""
 
 
 @typ.overload
