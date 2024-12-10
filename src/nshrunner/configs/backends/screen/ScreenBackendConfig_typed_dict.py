@@ -30,10 +30,10 @@ class LoggingConfig(typ.TypedDict, total=False):
 class ScreenBackendConfigTypedDict(typ.TypedDict, total=False):
     """Configuration for the GNU screen backbone."""
 
-    name: typ.Required[str]
+    name: str
     """Name of the screen session. Used to identify and reattach to sessions."""
 
-    logging: typ.Required[LoggingConfig]
+    logging: LoggingConfig
     """Logging configuration for the screen session and commands."""
 
     attach: bool

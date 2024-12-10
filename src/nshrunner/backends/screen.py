@@ -22,10 +22,10 @@ class LoggingConfig(C.Config):
 class ScreenBackendConfig(C.Config):
     """Configuration for the GNU screen backbone"""
 
-    name: str
+    name: str = "nshrunner"
     """Name of the screen session. Used to identify and reattach to sessions"""
 
-    logging: LoggingConfig
+    logging: LoggingConfig = LoggingConfig()
     """Logging configuration for the screen session and commands"""
 
     attach: bool = True
