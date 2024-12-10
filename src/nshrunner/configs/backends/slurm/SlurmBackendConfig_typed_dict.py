@@ -83,39 +83,11 @@ class SlurmMailConfig(typ.TypedDict, total=False):
     - ALL: All events."""
 
 
-class SlurmResourcesConfig(typ.TypedDict):
-    """Configuration for computational resources."""
-
-    cpus_per_task: int
-    """Number of CPUs per task."""
-
-    gpus_per_node: int
-    """Number of GPUs required per node. Set to 0 for CPU-only jobs."""
-
-    memory_gb_per_node: float
-    """Memory required in gigabytes."""
-
-    nodes: int
-    """Number of nodes to allocate for the job."""
-
-    time: str
-    """Maximum wall time for the job. Job will be terminated after this duration."""
-
-    qos: typ.NotRequired[str | None]
-    """Quality of Service (QoS) level for the job. Controls priority and resource limits."""
-
-    constraint: typ.NotRequired[str | list[str] | None]
-    """Node constraints for job allocation. Can be a single constraint or list of constraints
-    
-    These constraints can be features defined by the SLURM administrator that are required for the job.
-    Multiple constraints are combined using logical AND."""
-
-
 # Schema entries
 class SlurmBackendConfigTypedDict(typ.TypedDict, total=False):
     """Configuration for the SLURM backbone."""
 
-    name: typ.Required[str]
+    name: str
     """Name of the job. This will appear in SLURM queue listings."""
 
     account: str | None
@@ -129,8 +101,33 @@ class SlurmBackendConfigTypedDict(typ.TypedDict, total=False):
     - cpu: For CPU-only jobs
     - debug: For short test runs."""
 
-    resources: typ.Required[SlurmResourcesConfig]
-    """Resource requirements for the job including CPU, GPU, memory, and time limits."""
+    cpus_per_task: typ.Required[int]
+    """Number of CPUs per task."""
+
+    gpus_per_node: typ.Required[int]
+    """Number of GPUs required per node. Set to 0 for CPU-only jobs."""
+
+    memory_gb_per_node: typ.Required[int | float | str]
+    """Memory required in gigabytes per node
+    
+    Can be specified as:
+    - A number (int/float): Amount of memory in GB
+    - "all": Request all available memory on the node."""
+
+    nodes: typ.Required[int]
+    """Number of nodes to allocate for the job."""
+
+    time: typ.Required[str]
+    """Maximum wall time for the job. Job will be terminated after this duration."""
+
+    qos: str | None
+    """Quality of Service (QoS) level for the job. Controls priority and resource limits."""
+
+    constraint: str | list[str] | None
+    """Node constraints for job allocation. Can be a single constraint or list of constraints
+    
+    These constraints can be features defined by the SLURM administrator that are required for the job.
+    Multiple constraints are combined using logical AND."""
 
     output_dir: str | None
     """Directory where SLURM output and error files will be written

@@ -9,35 +9,6 @@ from typing import Literal
 import nshconfig as C
 
 
-class SlurmResourcesConfig(C.Config):
-    """Configuration for computational resources"""
-
-    cpus_per_task: int
-    """Number of CPUs per task"""
-
-    gpus_per_node: int
-    """Number of GPUs required per node. Set to 0 for CPU-only jobs"""
-
-    memory_gb_per_node: float
-    """Memory required in gigabytes"""
-
-    nodes: int
-    """Number of nodes to allocate for the job"""
-
-    time: timedelta
-    """Maximum wall time for the job. Job will be terminated after this duration"""
-
-    qos: str | None = None
-    """Quality of Service (QoS) level for the job. Controls priority and resource limits"""
-
-    constraint: str | Sequence[str] | None = None
-    """Node constraints for job allocation. Can be a single constraint or list of constraints
-
-    These constraints can be features defined by the SLURM administrator that are required for the job.
-    Multiple constraints are combined using logical AND.
-    """
-
-
 class SlurmMailConfig(C.Config):
     """Configuration for email notifications"""
 
@@ -75,7 +46,7 @@ class SlurmMailConfig(C.Config):
 class SlurmBackendConfig(C.Config):
     """Configuration for the SLURM backbone"""
 
-    name: str
+    name: str = "nshrunner"
     """Name of the job. This will appear in SLURM queue listings"""
 
     account: str | None = None
@@ -90,9 +61,38 @@ class SlurmBackendConfig(C.Config):
     - debug: For short test runs
     """
 
-    resources: SlurmResourcesConfig
-    """Resource requirements for the job including CPU, GPU, memory, and time limits"""
+    # Moved from SlurmResourcesConfig
+    cpus_per_task: int
+    """Number of CPUs per task"""
 
+    gpus_per_node: int
+    """Number of GPUs required per node. Set to 0 for CPU-only jobs"""
+
+    memory_gb_per_node: int | float | Literal["all"]
+    """Memory required in gigabytes per node
+
+    Can be specified as:
+    - A number (int/float): Amount of memory in GB
+    - "all": Request all available memory on the node
+    """
+
+    nodes: int
+    """Number of nodes to allocate for the job"""
+
+    time: timedelta
+    """Maximum wall time for the job. Job will be terminated after this duration"""
+
+    qos: str | None = None
+    """Quality of Service (QoS) level for the job. Controls priority and resource limits"""
+
+    constraint: str | Sequence[str] | None = None
+    """Node constraints for job allocation. Can be a single constraint or list of constraints
+
+    These constraints can be features defined by the SLURM administrator that are required for the job.
+    Multiple constraints are combined using logical AND.
+    """
+
+    # Other existing fields
     output_dir: Path | None = None
     """Directory where SLURM output and error files will be written
 
@@ -134,10 +134,14 @@ class SlurmBackendConfig(C.Config):
 
         kwargs: SlurmJobKwargs = {
             "name": self.name,
-            "nodes": self.resources.nodes,
-            "cpus_per_task": self.resources.cpus_per_task,
-            "memory_mb": int(self.resources.memory_gb_per_node * 1024),
-            "time": self.resources.time,
+            "nodes": self.nodes,
+            "cpus_per_task": self.cpus_per_task,
+            "memory_mb": (
+                0  # Request all memory
+                if self.memory_gb_per_node == "all"
+                else int(self.memory_gb_per_node * 1024)
+            ),
+            "time": self.time,
             "timeout_signal": self.timeout_signal,
             "timeout_signal_delay": self.timeout_delay,
             "exclusive": self.exclusive,
@@ -151,13 +155,13 @@ class SlurmBackendConfig(C.Config):
             kwargs["account"] = self.account
         if self.partition is not None:
             kwargs["partition"] = self.partition
-        if self.resources.qos is not None:
-            kwargs["qos"] = self.resources.qos
-        if self.resources.constraint is not None:
-            kwargs["constraint"] = self.resources.constraint
+        if self.qos is not None:
+            kwargs["qos"] = self.qos
+        if self.constraint is not None:
+            kwargs["constraint"] = self.constraint
 
-        if self.resources.gpus_per_node > 0:
-            kwargs["gres"] = f"gpu:{self.resources.gpus_per_node}"
+        if self.gpus_per_node > 0:
+            kwargs["gres"] = f"gpu:{self.gpus_per_node}"
 
         if self.mail is not None:
             kwargs["mail_user"] = self.mail.user

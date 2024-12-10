@@ -6,7 +6,6 @@ from nshrunner.backends.screen import LoggingConfig as LoggingConfig
 from nshrunner.backends.screen import ScreenBackendConfig as ScreenBackendConfig
 from nshrunner.backends.slurm import SlurmBackendConfig as SlurmBackendConfig
 from nshrunner.backends.slurm import SlurmMailConfig as SlurmMailConfig
-from nshrunner.backends.slurm import SlurmResourcesConfig as SlurmResourcesConfig
 
 from .screen.LoggingConfig_typed_dict import CreateLoggingConfig as CreateLoggingConfig
 from .screen.LoggingConfig_typed_dict import (
@@ -42,17 +41,6 @@ from .slurm.SlurmMailConfig_typed_dict import (
 
 SlurmMailConfigInstanceOrDict = SlurmMailConfig | SlurmMailConfigTypedDict
 
-from .slurm.SlurmResourcesConfig_typed_dict import (
-    CreateSlurmResourcesConfig as CreateSlurmResourcesConfig,
-)
-from .slurm.SlurmResourcesConfig_typed_dict import (
-    SlurmResourcesConfigTypedDict as SlurmResourcesConfigTypedDict,
-)
-
-SlurmResourcesConfigInstanceOrDict = (
-    SlurmResourcesConfig | SlurmResourcesConfigTypedDict
-)
-
 
 from . import screen as screen
 from . import slurm as slurm
@@ -62,7 +50,6 @@ __all__ = [
     "CreateScreenBackendConfig",
     "CreateSlurmBackendConfig",
     "CreateSlurmMailConfig",
-    "CreateSlurmResourcesConfig",
     "LoggingConfig",
     "LoggingConfigInstanceOrDict",
     "LoggingConfigTypedDict",
@@ -75,9 +62,6 @@ __all__ = [
     "SlurmMailConfig",
     "SlurmMailConfigInstanceOrDict",
     "SlurmMailConfigTypedDict",
-    "SlurmResourcesConfig",
-    "SlurmResourcesConfigInstanceOrDict",
-    "SlurmResourcesConfigTypedDict",
     "screen",
     "slurm",
 ]
