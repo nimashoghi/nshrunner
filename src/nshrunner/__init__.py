@@ -9,11 +9,11 @@ from nshsnap import snapshot as snapshot
 from . import session as session
 from ._runner import Config as Config
 from ._runner import Config as RunnerConfig
-from ._runner import PythonLoggingConfig as PythonLoggingConfig
 from ._runner import Runner as Runner
-from ._runner import SeedConfig as SeedConfig
-from ._runner import Snapshot as Snapshot
 from .session import Session as Session
+from .wrapper_fns import run_local as run_local
+from .wrapper_fns import submit_screen as submit_screen
+from .wrapper_fns import submit_slurm as submit_slurm
 
 if TYPE_CHECKING:
     _ = RunnerConfig

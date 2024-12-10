@@ -1,6 +1,6 @@
 # nshrunner
 
-nshrunner is a Python library that provides a unified way to run functions in various environments, such as local dev machines, cloud VMs, SLURM clusters, and LSF clusters. It was created to simplify the process of running ML training jobs across multiple machines and environments.
+nshrunner is a Python library that provides a unified way to run functions in various environments, such as local dev machines, cloud VMs, and SLURM clusters. It was created to simplify the process of running ML training jobs across multiple machines and environments.
 
 ## Motivation
 
@@ -8,7 +8,7 @@ When running ML training jobs on different machines and environments, it can be 
 
 ## Features
 
-- Supports running functions locally, on SLURM clusters, and on LSF clusters
+- Supports running functions locally, on SLURM clusters, and in GNU Screen sessions
 - Provides a unified interface for running functions across different environments
 - Allows for easy configuration of job options, such as resource requirements and environment variables
 - Supports snapshotting the environment to ensure reproducibility, using the [`nshsnap`](https://www.github.com/nimashoghi/nshsnap) library
@@ -24,56 +24,80 @@ pip install nshrunner
 
 ## Usage
 
-Here's a simple example of how to use nshrunner to run a function locally:
+Here's a simple example showing the different ways to run a function:
 
 ```python
 import nshrunner as R
 
-def run_fn(x: int):
-    return x + 5
+def train_model(batch_size: int, learning_rate: float):
+    # Training logic here
+    return {"accuracy": 0.95}
 
-runs = [(1,)]
+# Define runs with different hyperparameters
+runs = [
+    (32, 0.001),  # (batch_size, learning_rate)
+    (64, 0.0005),
+]
 
-runner = R.Runner(run_fn, R.RunnerConfig(working_dir="."))
-list(runner.local(runs))
-```
+# Run locally
+results = R.run_local(train_model, runs)
 
-To run the same function on a SLURM cluster:
-
-```python
-runner.submit_slurm(
+# Run in a GNU Screen session
+R.submit_screen(
+    train_model,
     runs,
-    {
-        "partition": "learnaccel",
-        "nodes": 4,
-        "ntasks_per_node": 8,  # Change this to limit # of GPUs
-        "gpus_per_task": 1,
-        "cpus_per_task": 1,
-    },
-    snapshot=True,
+    screen={
+        "name": "training",
+        "logging": {
+            "output_file": "logs/output.log",
+            "error_file": "logs/error.log"
+        },
+        "attach": False  # Run detached
+    }
+)
+
+# Run on SLURM
+R.submit_slurm(
+    train_model,
+    runs,
+    slurm={
+        "name": "training",
+        "partition": "gpu",
+        "resources": {
+            "nodes": 1,
+            "cpus": 4,
+            "gpus": 1,
+            "memory_gb": 32,
+            "time": "12:00:00"
+        },
+        "output_dir": "logs"
+    }
 )
 ```
 
-And on an LSF cluster:
+The library provides a consistent interface across different execution environments while handling the complexities of:
+
+- Job submission and management
+- Resource allocation
+- Environment setup
+- Output logging
+- Error handling
+
+For more advanced usage, you can configure additional options like:
 
 ```python
-runner.submit_lsf(
+# Configure environment snapshot for reproducibility
+R.submit_slurm(
+    train_model,
     runs,
-    {
-        "summit": True,
-        "queue": "learnaccel",
-        "nodes": 4,
-        "rs_per_node": 8,  # Change this to limit # of GPUs
+    runner={
+        "working_dir": "experiments",
+        "snapshot": True,  # Snapshot code and dependencies
+        "seed": {"seed": 42}  # Set random seeds
     },
-    snapshot=True,
+    slurm={...}
 )
 ```
-
-For more detailed usage examples, please refer to the documentation.
-
-## Acknowledgements
-
-`nshrunner` is heavily inspired by [`submitit`](https://github.com/facebookincubator/submitit). It builds on `submitit`'s design and adds support for LSF clusters, snapshotting, and other features.
 
 ## Contributing
 

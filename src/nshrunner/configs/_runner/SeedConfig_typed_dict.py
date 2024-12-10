@@ -22,15 +22,23 @@ class SeedConfigTypedDict(typ.TypedDict, total=False):
 
 
 @typ.overload
-def CreateSeedConfig(dict: SeedConfigTypedDict, /) -> SeedConfig: ...
+def CreateSeedConfig(**dict: typ.Unpack[SeedConfigTypedDict]) -> SeedConfig: ...
 
 
 @typ.overload
-def CreateSeedConfig(**dict: typ.Unpack[SeedConfigTypedDict]) -> SeedConfig: ...
+def CreateSeedConfig(data: SeedConfigTypedDict | SeedConfig, /) -> SeedConfig: ...
 
 
 def CreateSeedConfig(*args, **kwargs):
     from nshrunner._seed import SeedConfig
 
-    dict = args[0] if args else kwargs
-    return SeedConfig.model_validate(dict)
+    if not args and kwargs:
+        # Called with keyword arguments
+        return SeedConfig.from_dict(kwargs)
+    elif len(args) == 1:
+        return SeedConfig.from_dict_or_instance(args[0])
+    else:
+        raise TypeError(
+            f"CreateSeedConfig accepts either a SeedConfigTypedDict, "
+            f"keyword arguments, or a SeedConfig instance"
+        )

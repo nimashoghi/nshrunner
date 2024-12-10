@@ -19,7 +19,6 @@ list(runner.local(runs))
 runner.session(
     runs,
     {},
-    snapshot=True,
     env={"CUDA_VISIBLE_DEVICES": "0"},
 )
 
@@ -33,5 +32,4 @@ runner.submit_slurm(
         "gpus_per_task": 1,
         "cpus_per_task": 1,
     },
-    snapshot=True,
 )

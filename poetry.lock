@@ -485,13 +485,13 @@ files = [
 
 [[package]]
 name = "nshconfig"
-version = "0.31.3"
+version = "0.31.5"
 description = "Fully typed configuration management, powered by Pydantic"
 optional = false
 python-versions = "<4.0,>=3.10"
 files = [
-    {file = "nshconfig-0.31.3-py3-none-any.whl", hash = "sha256:61781feda3504b86deef110cba51f8fa1b5d81c3f1d56421d2e8568411262a14"},
-    {file = "nshconfig-0.31.3.tar.gz", hash = "sha256:5414e51e537137cae9450c616cf8ccfac7e9b4b1e11ecc1417b31c2f5e3dbcf5"},
+    {file = "nshconfig-0.31.5-py3-none-any.whl", hash = "sha256:b7c959393f74b3e5f0865daceaed9006dc23bb4a762bf983a1a0a7ab7928acba"},
+    {file = "nshconfig-0.31.5.tar.gz", hash = "sha256:21fed99d0de6a5c26b713427132f3612967b8e60749d13e38d7566ffa5d820b9"},
 ]
 
 [package.dependencies]
@@ -504,13 +504,13 @@ yaml = ["pydantic-yaml"]
 
 [[package]]
 name = "nshsnap"
-version = "0.6.0"
+version = "0.7.1"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.10"
 files = [
-    {file = "nshsnap-0.6.0-py3-none-any.whl", hash = "sha256:c9af3b87f04fd9f00e0cb04d90f6ed43c068b223e20c019e7b8c68c500e26c72"},
-    {file = "nshsnap-0.6.0.tar.gz", hash = "sha256:8c5a830d0abd194d917f1b8c0bcb879c5be622590e3935d6f058c1a773753d61"},
+    {file = "nshsnap-0.7.1-py3-none-any.whl", hash = "sha256:ca8fb2802dd3164714aec697125a8af5ad3abe50fc5a0c5f86e311fec9716803"},
+    {file = "nshsnap-0.7.1.tar.gz", hash = "sha256:8e1ec5d5a612e8dc0fbdbdd8012e9cce1bc8c63716a5dc4d8f8d0e2fdf98dba1"},
 ]
 
 [package.dependencies]

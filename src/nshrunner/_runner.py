@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import functools
 import logging
-import os
 import sys
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -12,10 +11,9 @@ from typing import Generic, cast
 
 import nshconfig as C
 import nshsnap
-from typing_extensions import TypeAliasType, TypeVar, TypeVarTuple, Unpack
+from typing_extensions import TypeVar, TypeVarTuple, Unpack
 
 from . import _env
-from ._logging import PythonLoggingConfig, init_python_logging
 from ._seed import SeedConfig, seed_everything
 from ._submit import screen, slurm
 from ._util.env import with_env
@@ -27,14 +25,6 @@ from ._util.environment import (
 from ._util.git import _gitignored_dir
 
 log = logging.getLogger(__name__)
-
-_Path = TypeAliasType("_Path", str | Path | os.PathLike)
-Snapshot = TypeAliasType(
-    "Snapshot", bool | nshsnap.SnapshotConfig | nshsnap.SnapshotConfigKwargsDict
-)
-
-
-DEFAULT_SNAPSHOT_KWARGS: nshsnap.SnapshotConfigKwargsDict = {}
 
 
 TArguments = TypeVarTuple("TArguments")
@@ -57,28 +47,30 @@ class _Session:
 
 
 class Config(C.Config):
-    working_dir: _Path | None = None
+    working_dir: str | Path | None = None
     """
     The `working_dir` parameter is a string that represents the directory where the program will save its execution files and logs.
         This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
         If `None`, this will default to the current working directory / `nshrunner`.
     """
 
-    python_logging: PythonLoggingConfig | None = PythonLoggingConfig()
-    """Logging configuration for the runner."""
-
-    seed: SeedConfig | None = SeedConfig(seed=0)
+    seed: int | SeedConfig | None = SeedConfig(seed=0)
     """Seed configuration for the runner."""
 
     env: Mapping[str, str] | None = None
     """Environment variables to set for the session."""
 
-    auto_snapshot_args_resolved_modules: bool = False
-    """If enabled, `nshsnap` will automatically look through the function
-    arguments and snapshot any third-party modules that are resolved."""
+    snapshot: bool | nshsnap.SnapshotConfig = False
+    """Snapshot configuration for the session."""
 
-    auto_snapshot_editable: bool = False
-    """If enabled, `nshsnap` will automatically snapshot any editable packages."""
+    def _resolve_seed_config(self):
+        if self.seed is None:
+            return None
+
+        if isinstance(self.seed, int):
+            return SeedConfig(seed=self.seed)
+
+        return self.seed
 
 
 T = TypeVar("T", infer_variance=True)
@@ -96,13 +88,9 @@ def _tqdm_if_installed(iterable: Iterable[T], *args, **kwargs) -> Iterable[T]:
 def _wrap_run_fn(config: Config, run_fn: Callable[[Unpack[TArguments]], TReturn]):
     @functools.wraps(run_fn)
     def wrapped_run_fn(*args: Unpack[TArguments]) -> TReturn:
-        # Set up Python logging
-        if config.python_logging is not None:
-            init_python_logging(config.python_logging)
-
         # Seed
-        if config.seed is not None:
-            seed_everything(config.seed)
+        if (seed := config._resolve_seed_config()) is not None:
+            seed_everything(seed)
 
         return run_fn(*args)
 
@@ -143,7 +131,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         id: str | None = None,
         *,
         env: Mapping[str, str] | None,
-        snapshot: Snapshot,
     ):
         runs = list(runs)
 
@@ -170,29 +157,21 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         }
 
         # Take a snapshot of the environment if needed
-        if snapshot:
+        if snapshot := self.config.snapshot:
             # If the snapshot is not a SnapshotConfig object, create one
             if not isinstance(snapshot, nshsnap.SnapshotConfig):
                 if snapshot is True:
                     snapshot = {}
 
                 # Merge the default snapshot kwargs
-                snapshot = {**DEFAULT_SNAPSHOT_KWARGS, **snapshot}
+                snapshot = {**snapshot}
 
                 # If the save directory is not set, set it to the session directory
                 if not snapshot.get("snapshot_dir"):
                     snapshot_dir = _gitignored_dir(session_dir / "nshsnap", create=True)
                     snapshot["snapshot_dir"] = snapshot_dir
 
-                snapshot = nshsnap.SnapshotConfig.from_kwargs(snapshot)
-
-            # Automatically snapshot any third-party modules that are resolved
-            if self.config.auto_snapshot_args_resolved_modules:
-                snapshot = snapshot.with_resolved_modules(*runs)
-
-            # Automatically snapshot any editable packages
-            if self.config.auto_snapshot_editable:
-                snapshot = snapshot.with_editable_modules()
+                snapshot = nshsnap.configs.SnapshotConfig.from_dict(snapshot)
 
             session.snapshot = nshsnap.snapshot(snapshot)
             snapshot_path_str = str(session.snapshot.snapshot_dir.absolute())
@@ -213,7 +192,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         *,
         env: Mapping[str, str] | None = None,
     ):
-        runs, session = self._setup_session(runs, env=env, snapshot=False)
+        runs, session = self._setup_session(runs, env=env)
         with with_env(session.env):
             for args in _tqdm_if_installed(runs):
                 yield self._wrapped_run_fn(*args)
@@ -234,18 +213,13 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs: Iterable[tuple[Unpack[TArguments]]],
         options: screen.ScreenJobKwargs = {},
         *,
-        snapshot: Snapshot,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
         activate_venv: bool = True,
         print_command: bool = True,
     ):
         # Resolve all runs
-        runs, session = self._setup_session(
-            runs,
-            env=env,
-            snapshot=snapshot,
-        )
+        runs, session = self._setup_session(runs, env=env)
         base_dir = session.dir_path / "submit"
         base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -308,18 +282,13 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         runs: Iterable[tuple[Unpack[TArguments]]],
         options: slurm.SlurmJobKwargs,
         *,
-        snapshot: Snapshot,
         setup_commands: Sequence[str] | None = None,
         env: Mapping[str, str] | None = None,
         activate_venv: bool = True,
         print_command: bool = True,
     ):
         # Resolve all runs
-        runs, session = self._setup_session(
-            runs,
-            env=env,
-            snapshot=snapshot,
-        )
+        runs, session = self._setup_session(runs, env=env)
         base_dir = session.dir_path / "submit"
         base_dir.mkdir(parents=True, exist_ok=True)
 

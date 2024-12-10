@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+import signal
+from collections.abc import Sequence
+from datetime import timedelta
+from pathlib import Path
+from typing import Literal
+
+import nshconfig as C
+
+
+class SlurmResourcesConfig(C.Config):
+    """Configuration for computational resources"""
+
+    cpus: int
+    """Number of CPUs per task"""
+
+    gpus: int
+    """Number of GPUs required per node. Set to 0 for CPU-only jobs"""
+
+    memory_gb: float
+    """Memory required in gigabytes"""
+
+    nodes: int
+    """Number of nodes to allocate for the job"""
+
+    time: timedelta
+    """Maximum wall time for the job. Job will be terminated after this duration"""
+
+
+class SlurmMailConfig(C.Config):
+    """Configuration for email notifications"""
+
+    user: str
+    """Email address to receive SLURM notifications"""
+
+    types: Sequence[
+        Literal[
+            "NONE",
+            "BEGIN",
+            "END",
+            "FAIL",
+            "REQUEUE",
+            "ALL",
+            "INVALID_DEPEND",
+            "STAGE_OUT",
+            "TIME_LIMIT",
+            "TIME_LIMIT_90",
+            "TIME_LIMIT_80",
+            "TIME_LIMIT_50",
+            "ARRAY_TASKS",
+        ]
+    ] = ["END", "FAIL"]
+    """Types of events that should trigger email notifications
+
+    Common values:
+    - BEGIN: Job start
+    - END: Job completion
+    - FAIL: Job failure
+    - TIME_LIMIT: Job reached time limit
+    - ALL: All events
+    """
+
+
+class SlurmBackendConfig(C.Config):
+    """Configuration for the SLURM backbone"""
+
+    name: str
+    """Name of the job. This will appear in SLURM queue listings"""
+
+    account: str | None = None
+    """Account to charge for resource usage. Required by some clusters"""
+
+    partition: str | Sequence[str] | None = None
+    """SLURM partition(s) to submit to. Can be a single partition or list of partitions
+
+    Common values:
+    - gpu: For GPU jobs
+    - cpu: For CPU-only jobs
+    - debug: For short test runs
+    """
+
+    qos: str | None = None
+    """Quality of Service (QoS) level for the job. Controls priority and resource limits"""
+
+    resources: SlurmResourcesConfig
+    """Resource requirements for the job including CPU, GPU, memory, and time limits"""
+
+    output_dir: Path
+    """Directory where SLURM output and error files will be written
+
+    Files will be named using SLURM job variables:
+    - %j: Job ID
+    - %a: Array task ID (for job arrays)
+    """
+
+    mail: SlurmMailConfig | None = None
+    """Email notification settings. If None, no emails will be sent"""
+
+    timeout_min: int = 2
+    """Minutes before job end to send timeout signal, allowing graceful shutdown"""
+
+    timeout_signal: signal.Signals = signal.SIGTERM
+    """Signal to send when job approaches time limit
+
+    Common values:
+    - SIGTERM: Standard termination request
+    - SIGINT: Interrupt (like Ctrl+C)
+    - SIGUSR1/SIGUSR2: User-defined signals
+    """
+
+    exclusive: bool = False
+    """If True, request exclusive access to nodes (no sharing with other jobs)"""
+
+    def to_slurm_kwargs(self):
+        """Convert SimpleSlurmConfig to full SlurmJobKwargs
+
+        Returns
+        -------
+        SlurmJobKwargs
+            Dictionary of arguments compatible with SLURM sbatch command
+        """
+        from .._submit.slurm import SlurmJobKwargs
+
+        kwargs: SlurmJobKwargs = {
+            "name": self.name,
+            "nodes": self.resources.nodes,
+            "cpus_per_task": self.resources.cpus,
+            "memory_mb": int(self.resources.memory_gb * 1024),
+            "time": self.resources.time,
+            "timeout_signal": self.timeout_signal,
+            "timeout_signal_delay": timedelta(minutes=self.timeout_min),
+            "exclusive": self.exclusive,
+            "output_file": self.output_dir / "%j-%a.out",
+            "error_file": self.output_dir / "%j-%a.err",
+        }
+
+        if self.account is not None:
+            kwargs["account"] = self.account
+        if self.partition is not None:
+            kwargs["partition"] = self.partition
+        if self.qos is not None:
+            kwargs["qos"] = self.qos
+
+        if self.resources.gpus > 0:
+            kwargs["gres"] = f"gpu:{self.resources.gpus}"
+
+        if self.mail is not None:
+            kwargs["mail_user"] = self.mail.user
+            kwargs["mail_type"] = self.mail.types
+
+        return kwargs
