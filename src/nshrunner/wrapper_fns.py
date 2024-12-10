@@ -44,7 +44,7 @@ def submit_screen(
     fn: Callable[[Unpack[TArguments]], TReturn],
     args_list: Iterable[tuple[Unpack[TArguments]]],
     *,
-    screen: configs.ScreenBackendConfigInstanceOrDict,
+    screen: configs.ScreenBackendConfigInstanceOrDict = {},
     runner: configs.ConfigInstanceOrDict = {},
 ):
     """Submit function using GNU Screen with multiple argument sets.
