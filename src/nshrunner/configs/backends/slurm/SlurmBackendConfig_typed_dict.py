@@ -101,11 +101,14 @@ class SlurmBackendConfigTypedDict(typ.TypedDict, total=False):
     - cpu: For CPU-only jobs
     - debug: For short test runs."""
 
+    tasks_per_node: typ.Required[int]
+    """Number of tasks to run per node."""
+
     cpus_per_task: typ.Required[int]
     """Number of CPUs per task."""
 
-    gpus_per_node: typ.Required[int]
-    """Number of GPUs required per node. Set to 0 for CPU-only jobs."""
+    gpus_per_task: typ.Required[int]
+    """Number of GPUs required per task. Set to 0 for CPU-only tasks."""
 
     memory_gb_per_node: typ.Required[int | float | str]
     """Memory required in gigabytes per node

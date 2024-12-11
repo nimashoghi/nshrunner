@@ -61,12 +61,14 @@ class SlurmBackendConfig(C.Config):
     - debug: For short test runs
     """
 
-    # Moved from SlurmResourcesConfig
+    tasks_per_node: int
+    """Number of tasks to run per node"""
+
     cpus_per_task: int
     """Number of CPUs per task"""
 
-    gpus_per_node: int
-    """Number of GPUs required per node. Set to 0 for CPU-only jobs"""
+    gpus_per_task: int
+    """Number of GPUs required per task. Set to 0 for CPU-only tasks"""
 
     memory_gb_per_node: int | float | Literal["all"]
     """Memory required in gigabytes per node
@@ -135,6 +137,7 @@ class SlurmBackendConfig(C.Config):
         kwargs: SlurmJobKwargs = {
             "name": self.name,
             "nodes": self.nodes,
+            "ntasks_per_node": self.tasks_per_node,
             "cpus_per_task": self.cpus_per_task,
             "memory_mb": (
                 0  # Request all memory
@@ -160,8 +163,8 @@ class SlurmBackendConfig(C.Config):
         if self.constraint is not None:
             kwargs["constraint"] = self.constraint
 
-        if self.gpus_per_node > 0:
-            kwargs["gres"] = f"gpu:{self.gpus_per_node}"
+        if self.gpus_per_task > 0:
+            kwargs["gpus_per_task"] = self.gpus_per_task
 
         if self.mail is not None:
             kwargs["mail_user"] = self.mail.user

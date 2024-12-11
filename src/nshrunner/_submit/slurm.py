@@ -358,24 +358,22 @@ def _determine_gres(kwargs: SlurmJobKwargs) -> Sequence[str] | None:
 
 
 def _determine_ntasks_per_node(kwargs: SlurmJobKwargs) -> int | None:
-    # If `--ntasks-per-node` is set, just return it
-    if (ntasks_per_node := kwargs.get("ntasks_per_node")) is not None:
-        return ntasks_per_node
+    """
+    Determine the number of tasks per node, with validation.
 
-    # If `--ntasks` is set, we can infer `--ntasks-per-node`
+    Raises
+    ------
+    RuntimeError
+        If ntasks is specified without ntasks_per_node
+    """
+    # If ntasks is specified, raise an error suggesting ntasks_per_node
     if (ntasks := kwargs.get("ntasks")) is not None:
-        if (nodes := kwargs.get("nodes")) is None:
-            raise ValueError("Cannot infer `ntasks_per_node` without `nodes`.")
+        raise RuntimeError(
+            f"You set `--ntasks={ntasks}` in your SLURM bash script, but this variable "
+            f"is not supported. HINT: Use `--ntasks-per-node={ntasks}` instead."
+        )
 
-        # If nnodes is not divisible by ntasks, raise an error
-        if nodes % ntasks != 0:
-            raise ValueError(
-                "The number of nodes must be divisible by the number of tasks."
-            )
-
-        return ntasks // nodes
-
-    return None
+    return kwargs.get("ntasks_per_node")
 
 
 def _write_batch_script_to_file(
@@ -418,10 +416,7 @@ def _write_batch_script_to_file(
         if (nodes := kwargs.get("nodes")) is not None:
             f.write(f"#SBATCH --nodes={nodes}\n")
 
-        if (ntasks := kwargs.get("ntasks")) is not None:
-            f.write(f"#SBATCH --ntasks={ntasks}\n")
-
-        if (ntasks_per_node := kwargs.get("ntasks_per_node")) is not None:
+        if (ntasks_per_node := _determine_ntasks_per_node(kwargs)) is not None:
             f.write(f"#SBATCH --ntasks-per-node={ntasks_per_node}\n")
 
         if (output_file := kwargs.get("output_file")) is not None:
@@ -547,10 +542,7 @@ def update_options(kwargs_in: SlurmJobKwargs, base_dir: Path):
         command_parts.extend(srun_flags)
 
     # Add ntasks/cpus/gpus
-    if (ntasks := kwargs.get("ntasks")) is not None:
-        command_parts.append(f"--ntasks={ntasks}")
-
-    if (ntasks_per_node := kwargs.get("ntasks_per_node")) is not None:
+    if (ntasks_per_node := _determine_ntasks_per_node(kwargs)) is not None:
         command_parts.append(f"--ntasks-per-node={ntasks_per_node}")
 
     if (cpus_per_task := kwargs.get("cpus_per_task")) is not None:
