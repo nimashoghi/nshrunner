@@ -18,7 +18,6 @@ def _get_signal(env_var: str):
     if not (sig_name := os.environ.get(env_var)):
         return None
 
-    sig_name = sig_name.replace("SIG", "")
     try:
         return signal.Signals[sig_name]
     except KeyError:
