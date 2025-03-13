@@ -21,7 +21,22 @@ class Submission:
 
     @property
     def command_str(self) -> str:
-        return " ".join(self.command_parts)
+        """
+        Convert command parts to a string, adding quotes around arguments with spaces.
+
+        Returns
+        -------
+        str
+            Command string with proper quoting for arguments containing spaces or other whitespace
+        """
+        quoted_parts = []
+        for part in self.command_parts:
+            # Check if the part contains any whitespace characters
+            if any(char.isspace() for char in part):
+                quoted_parts.append(f'"{part}"')
+            else:
+                quoted_parts.append(part)
+        return " ".join(quoted_parts)
 
 
 def write_submission_meta(
