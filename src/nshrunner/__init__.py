@@ -10,6 +10,7 @@ from . import session as session
 from ._runner import Config as Config
 from ._runner import Config as RunnerConfig
 from ._runner import Runner as Runner
+from ._submit._util import Submission as Submission
 from .session import Session as Session
 from .wrapper_fns import run_local as run_local
 from .wrapper_fns import submit_screen as submit_screen
