@@ -7,7 +7,7 @@ import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Generic, cast
+from typing import Generic, Literal, cast
 
 import nshconfig as C
 import nshsnap
@@ -47,11 +47,16 @@ class _Session:
 
 
 class Config(C.Config):
-    working_dir: str | Path | None = None
+    working_dir: str | Path | Literal["cwd", "tmp", "home-cache"] = "home-cache"
     """
     The `working_dir` parameter is a string that represents the directory where the program will save its execution files and logs.
-        This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
-        If `None`, this will default to the current working directory / `nshrunner`.
+    This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
+
+    Accepted values are:
+    - "cwd": The current working directory.
+    - "tmp": The temporary directory.
+    - "home-cache" (default): The cache directory in the user's home directory (i.e., `~/.cache/nshrunner`).
+
     """
 
     seed: int | SeedConfig | None = SeedConfig(seed=0)
@@ -71,6 +76,17 @@ class Config(C.Config):
             return SeedConfig(seed=self.seed)
 
         return self.seed
+
+    def _resolve_working_dir(self):
+        match self.working_dir:
+            case "cwd":
+                return Path.cwd() / "nshrunner"
+            case "tmp":
+                return Path("/tmp") / "nshrunner"
+            case "home-cache":
+                return Path.home() / ".cache" / "nshrunner"
+            case _:
+                return Path(self.working_dir)
 
 
 T = TypeVar("T", infer_variance=True)
@@ -139,10 +155,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             id = self.generate_id()
 
         # Create the session directory
-        if (working_dir := self.config.working_dir) is None:
-            working_dir = Path.cwd()
-        root_dir = gitignored_dir(Path(working_dir) / "nshrunner", create=True)
-        session_dir = gitignored_dir(root_dir / id, create=True)
+        working_dir = gitignored_dir(self.config._resolve_working_dir())
+        session_dir = gitignored_dir(working_dir / id, create=True)
 
         # Create the session object (to return)
         session = _Session(id=id, dir_path=session_dir)
