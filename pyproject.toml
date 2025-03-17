@@ -27,6 +27,8 @@ ipykernel = "*"
 ipywidgets = "*"
 pyright = "*"
 pysnooper = "*"
+pytest = "*"
+pytest-cov = "*"
 
 [build-system]
 requires = ["poetry-core"]
@@ -46,3 +48,16 @@ ignore = ["F722", "F821", "E731", "E741"]
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+python_classes = ["Test*"]
+minversion = "6.0"
+addopts = [
+    "--import-mode=importlib",
+    "--cov=src/nshrunner",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+]
