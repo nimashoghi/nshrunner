@@ -22,7 +22,7 @@ from ._util.environment import (
     remove_slurm_environment_variables,
     remove_wandb_environment_variables,
 )
-from ._util.git import _gitignored_dir
+from ._util.git import gitignored_dir
 
 log = logging.getLogger(__name__)
 
@@ -141,8 +141,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         # Create the session directory
         if (working_dir := self.config.working_dir) is None:
             working_dir = Path.cwd()
-        root_dir = _gitignored_dir(Path(working_dir) / "nshrunner", create=True)
-        session_dir = _gitignored_dir(root_dir / id, create=True)
+        root_dir = gitignored_dir(Path(working_dir) / "nshrunner", create=True)
+        session_dir = gitignored_dir(root_dir / id, create=True)
 
         # Create the session object (to return)
         session = _Session(id=id, dir_path=session_dir)
@@ -168,7 +168,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
                 # If the save directory is not set, set it to the session directory
                 if not snapshot.get("snapshot_dir"):
-                    snapshot_dir = _gitignored_dir(session_dir / "nshsnap", create=True)
+                    snapshot_dir = gitignored_dir(session_dir / "nshsnap", create=True)
                     snapshot["snapshot_dir"] = snapshot_dir
 
                 snapshot = nshsnap.configs.SnapshotConfig.from_dict(snapshot)
