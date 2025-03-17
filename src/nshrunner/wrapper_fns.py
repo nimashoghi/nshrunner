@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING
+from typing import (
+    TYPE_CHECKING,
+    Literal,  # add import for Literal
+)
 
 from typing_extensions import Unpack
 
@@ -82,6 +85,7 @@ def submit_parallel_screen(
     num_parallel_screens: int,
     screen: configs.ScreenBackendConfigInstanceOrDict = {},
     runner: configs.ConfigInstanceOrDict = {},
+    scheduling: Literal["round_robin", "block"] = "round_robin",  # new kwarg
 ):
     """Submit function using multiple GNU Screen sessions with argument sets distributed across sessions.
 
@@ -97,6 +101,10 @@ def submit_parallel_screen(
         Configuration for the Screen backend
     runner : configs.ConfigInstanceOrDict, optional
         Configuration for the runner (e.g. working directory, snapshot, etc.)
+    scheduling : {"round_robin", "block"}, optional
+        Scheduling mode for distributing argument sets. "round_robin" (default) assigns arguments
+        in an alternating sequence (e.g. [(0,), (2,)] and [(1,), (3,)] for 2 screens). "block"
+        divides the list into contiguous chunks (e.g. [(0,), (1,)] and [(2,), (3,)]).
 
     Returns
     -------
@@ -120,8 +128,15 @@ def submit_parallel_screen(
     # Create separate screen sessions for each partition
     submissions: list[Submission] = []
     for i in range(num_parallel_screens):
-        # Select args at index i, i+num_parallel_screens, i+2*num_parallel_screens, etc.
-        partition = args_list[i::num_parallel_screens]
+        if scheduling == "round_robin":
+            partition = args_list[i::num_parallel_screens]
+        elif scheduling == "block":
+            chunk_size = (
+                len(args_list) + num_parallel_screens - 1
+            ) // num_parallel_screens
+            partition = args_list[i * chunk_size : (i + 1) * chunk_size]
+        else:
+            raise ValueError(f"Invalid scheduling mode: {scheduling}")
         submission = Runner(fn, runner_config).session(
             partition, screen_config.to_screen_kwargs()
         )
