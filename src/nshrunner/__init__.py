@@ -13,6 +13,7 @@ from ._runner import Runner as Runner
 from ._submit._util import Submission as Submission
 from .session import Session as Session
 from .wrapper_fns import run_local as run_local
+from .wrapper_fns import submit_parallel_screen as submit_parallel_screen
 from .wrapper_fns import submit_screen as submit_screen
 from .wrapper_fns import submit_slurm as submit_slurm
 

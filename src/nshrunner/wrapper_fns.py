@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import (
-    TYPE_CHECKING,
-    Literal,  # add import for Literal
-)
+from typing import TYPE_CHECKING, Literal
 
 from typing_extensions import Unpack
 
@@ -85,9 +82,15 @@ def submit_parallel_screen(
     num_parallel_screens: int,
     screen: configs.ScreenBackendConfigInstanceOrDict = {},
     runner: configs.ConfigInstanceOrDict = {},
-    scheduling: Literal["round_robin", "block"] = "round_robin",  # new kwarg
+    scheduling: Literal["round_robin", "block"] = "round_robin",
+    runner_config_modifier: Callable[[int, configs.Config], configs.Config | None]
+    | None = None,
+    screen_config_modifier: Callable[
+        [int, configs.ScreenBackendConfig], configs.ScreenBackendConfig | None
+    ]
+    | None = None,
 ):
-    """Submit function using multiple GNU Screen sessions with argument sets distributed across sessions.
+    """Submit function using multiple GNU Screen sessions with per-session configuration overrides.
 
     Parameters
     ----------
@@ -105,6 +108,10 @@ def submit_parallel_screen(
         Scheduling mode for distributing argument sets. "round_robin" (default) assigns arguments
         in an alternating sequence (e.g. [(0,), (2,)] and [(1,), (3,)] for 2 screens). "block"
         divides the list into contiguous chunks (e.g. [(0,), (1,)] and [(2,), (3,)]).
+    runner_config_modifier : callable, optional
+        A callable that takes the session index and the runner config, and applies modifications.
+    screen_config_modifier : callable, optional
+        A callable that takes the session index and the screen config, and applies modifications.
 
     Returns
     -------
@@ -128,6 +135,17 @@ def submit_parallel_screen(
     # Create separate screen sessions for each partition
     submissions: list[Submission] = []
     for i in range(num_parallel_screens):
+        runner_config_screen = runner_config.model_copy(deep=True)
+        screen_config_screen = screen_config.model_copy(deep=True)
+
+        if runner_config_modifier:
+            if (ret := runner_config_modifier(i, runner_config_screen)) is not None:
+                runner_config_screen = ret
+
+        if screen_config_modifier:
+            if (ret := screen_config_modifier(i, screen_config_screen)) is not None:
+                screen_config_screen = ret
+
         if scheduling == "round_robin":
             partition = args_list[i::num_parallel_screens]
         elif scheduling == "block":
@@ -137,8 +155,8 @@ def submit_parallel_screen(
             partition = args_list[i * chunk_size : (i + 1) * chunk_size]
         else:
             raise ValueError(f"Invalid scheduling mode: {scheduling}")
-        submission = Runner(fn, runner_config).session(
-            partition, screen_config.to_screen_kwargs()
+        submission = Runner(fn, runner_config_screen).session(
+            partition, screen_config_screen.to_screen_kwargs()
         )
         submissions.append(submission)
 
