@@ -1,31 +1,34 @@
-[tool.poetry]
+[project]
 name = "nshrunner"
-version = "1.0.11"
+version = "1.1.0"
 description = ""
-authors = ["Nima Shoghi <nimashoghi@gmail.com>"]
+authors = [{ name = "Nima Shoghi", email = "nimashoghi@gmail.com" }]
+requires-python = ">=3.10,<4.0"
 readme = "README.md"
 
-[tool.poetry.urls]
+dependencies = [
+    "tqdm",
+    "typing-extensions",
+    "cloudpickle",
+    "deepmerge",
+    "nshconfig",
+    "nshsnap",
+]
+
+[project.optional-dependencies]
+extra = []
+
+[project.urls]
 homepage = "https://github.com/nimashoghi/nshrunner"
 
-[tool.poetry.dependencies]
-python = "^3.10"
-tqdm = "*"
-typing-extensions = "*"
-cloudpickle = "*"
-deepmerge = "*"
-nshconfig = "*"
-nshutils = "*"
-nshsnap = "*"
-
-[tool.poetry.scripts]
+[project.scripts]
 nshrunner-picklerunner = "nshrunner.picklerunner.main:main"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "*"
 ipykernel = "*"
 ipywidgets = "*"
-pyright = "*"
+basedpyright = "*"
 pysnooper = "*"
 pytest = "*"
 pytest-cov = "*"
@@ -34,7 +37,7 @@ pytest-cov = "*"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.pyright]
+[tool.basedpyright]
 typeCheckingMode = "standard"
 deprecateTypingAliases = true
 strictListInference = true
