@@ -2,8 +2,8 @@
     "module": "nshrunner",
     "output": "configs",
     "typed_dicts": {
-        "nshrunner._runner.Config": "configs/_runner/Config_typed_dict.py",
-        "nshrunner._seed.SeedConfig": "configs/_runner/SeedConfig_typed_dict.py",
+        "nshrunner._config.Config": "configs/_config/Config_typed_dict.py",
+        "nshrunner._seed.SeedConfig": "configs/_config/SeedConfig_typed_dict.py",
         "nshrunner.backends.slurm.SlurmBackendConfig": "configs/backends/slurm/SlurmBackendConfig_typed_dict.py",
         "nshrunner.backends.slurm.SlurmMailConfig": "configs/backends/slurm/SlurmMailConfig_typed_dict.py",
         "nshrunner.backends.screen.LoggingConfig": "configs/backends/screen/LoggingConfig_typed_dict.py",

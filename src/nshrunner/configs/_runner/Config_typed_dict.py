@@ -3,7 +3,7 @@ from __future__ import annotations
 import typing_extensions as typ
 
 if typ.TYPE_CHECKING:
-    from nshrunner._runner import Config
+    from nshrunner._config import Config
 
 
 __codegen__ = True
@@ -23,7 +23,7 @@ class SeedConfig(typ.TypedDict, total=False):
 
 
 class SnapshotConfig(typ.TypedDict, total=False):
-    snapshot_dir: str
+    snapshot_dir: str | None
     """The directory to save snapshots to."""
 
     modules: list[str]
@@ -33,7 +33,7 @@ class SnapshotConfig(typ.TypedDict, total=False):
     """What to do when a module is not found. Default: `"warn"`."""
 
     editable_modules: bool
-    """Snapshot all editable modules. Default: `False`."""
+    """Snapshot all editable modules. Default: `True`."""
 
 
 # Schema entries
@@ -55,7 +55,7 @@ class ConfigTypedDict(typ.TypedDict, total=False):
     env: dict[str, str] | None
     """Environment variables to set for the session."""
 
-    snapshot: bool | SnapshotConfig
+    snapshot: bool | SnapshotConfig | None
     """Snapshot configuration for the session."""
 
     save_main_script: bool
@@ -74,7 +74,7 @@ def CreateConfig(data: ConfigTypedDict | Config, /) -> Config: ...
 
 
 def CreateConfig(*args, **kwargs):
-    from nshrunner._runner import Config
+    from nshrunner._config import Config
 
     if not args and kwargs:
         # Called with keyword arguments

@@ -7,14 +7,14 @@ import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Generic, Literal, cast
+from typing import Generic, cast
 
-import nshconfig as C
 import nshsnap
 from typing_extensions import TypeVar, TypeVarTuple, Unpack
 
 from . import _env
-from ._seed import SeedConfig, seed_everything
+from ._config import Config
+from ._seed import seed_everything
 from ._submit import screen, slurm
 from ._util.env import with_env
 from ._util.environment import (
@@ -44,55 +44,6 @@ class _Session:
 
     snapshot: nshsnap.SnapshotInfo | None = None
     """The snapshot information for the session."""
-
-
-class Config(C.Config):
-    working_dir: str | Path | Literal["cwd", "tmp", "home-cache"] = "home-cache"
-    """
-    The `working_dir` parameter is a string that represents the directory where the program will save its execution files and logs.
-    This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
-
-    Accepted values are:
-    - "cwd": The current working directory.
-    - "tmp": The temporary directory.
-    - "home-cache" (default): The cache directory in the user's home directory (i.e., `~/.cache/nshrunner`).
-
-    """
-
-    seed: int | SeedConfig | None = SeedConfig(seed=0)
-    """Seed configuration for the runner."""
-
-    env: Mapping[str, str] | None = None
-    """Environment variables to set for the session."""
-
-    snapshot: bool | nshsnap.SnapshotConfig = False
-    """Snapshot configuration for the session."""
-
-    save_main_script: bool = True
-    """Whether to save the main script or notebook that's being executed."""
-
-    save_git_diff: bool = True
-    """Whether to save the git diff if the current directory is in a git repository."""
-
-    def _resolve_seed_config(self):
-        if self.seed is None:
-            return None
-
-        if isinstance(self.seed, int):
-            return SeedConfig(seed=self.seed)
-
-        return self.seed
-
-    def _resolve_working_dir(self):
-        match self.working_dir:
-            case "cwd":
-                return Path.cwd() / "nshrunner"
-            case "tmp":
-                return Path("/tmp") / "nshrunner"
-            case "home-cache":
-                return Path.home() / ".cache" / "nshrunner"
-            case _:
-                return Path(self.working_dir)
 
 
 T = TypeVar("T", infer_variance=True)
@@ -177,19 +128,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         }
 
         # Take a snapshot of the environment if needed
-        if snapshot := self.config.snapshot:
-            # If the snapshot is not a SnapshotConfig object, create one
-            if not isinstance(snapshot, nshsnap.SnapshotConfig):
-                if snapshot is True:
-                    snapshot = {}
-
-                # If the save directory is not set, set it to the session directory
-                if not snapshot.get("snapshot_dir"):
-                    snapshot_dir = gitignored_dir(session_dir / "nshsnap", create=True)
-                    snapshot["snapshot_dir"] = snapshot_dir
-
-                snapshot = nshsnap.configs.SnapshotConfig.from_dict(snapshot)
-
+        if (snapshot := self.config._resolve_snapshot_config(session_dir)) is not None:
             session.snapshot = nshsnap.snapshot(snapshot)
             snapshot_path_str = str(session.snapshot.snapshot_dir.absolute())
 

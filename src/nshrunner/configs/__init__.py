@@ -57,6 +57,7 @@ from .backends.slurm.SlurmMailConfig_typed_dict import (
 SlurmMailConfigInstanceOrDict = SlurmMailConfig | SlurmMailConfigTypedDict
 
 
+from . import _config as _config
 from . import _runner as _runner
 from . import _seed as _seed
 from . import backends as backends
@@ -87,6 +88,7 @@ __all__ = [
     "SlurmMailConfig",
     "SlurmMailConfigInstanceOrDict",
     "SlurmMailConfigTypedDict",
+    "_config",
     "_runner",
     "_seed",
     "backends",

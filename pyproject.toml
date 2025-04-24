@@ -11,7 +11,7 @@ dependencies = [
     "cloudpickle",
     "deepmerge",
     "nshconfig",
-    "nshsnap",
+    "nshsnap>=0.12",
 ]
 
 [project.optional-dependencies]
