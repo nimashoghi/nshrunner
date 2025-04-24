@@ -94,7 +94,7 @@ T = TypeVar("T", infer_variance=True)
 
 def _tqdm_if_installed(iterable: Iterable[T], *args, **kwargs) -> Iterable[T]:
     try:
-        from tqdm.auto import tqdm  # type: ignore
+        from tqdm.auto import tqdm  # pyright: ignore[reportMissingImports]
 
         return cast(Iterable[T], tqdm(iterable, *args, **kwargs))
     except ImportError:

@@ -5,7 +5,6 @@ description = ""
 authors = [{ name = "Nima Shoghi", email = "nimashoghi@gmail.com" }]
 requires-python = ">=3.10,<4.0"
 readme = "README.md"
-
 dependencies = [
     "tqdm",
     "typing-extensions",
