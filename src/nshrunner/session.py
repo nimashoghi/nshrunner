@@ -46,6 +46,12 @@ class Session:
     is_worker_script: bool
     """Indicates if this is running as a worker script."""
 
+    main_script_path: Path | None
+    """Path to the saved main script or notebook, if available."""
+
+    main_script_type: Literal["script", "notebook"] | None
+    """Type of the main script (Python script or Jupyter notebook), if available."""
+
     submit_base_dir: Path | None
     """Base directory for job submission, if applicable."""
 
@@ -87,12 +93,28 @@ class Session:
         snapshot_dir = os.environ.get(_env.SNAPSHOT_DIR)
         snapshot_modules = os.environ.get(_env.SNAPSHOT_MODULES)
 
+        # Get script type and validate it's either "script", "notebook", or None
+        script_type_str = os.environ.get(_env.MAIN_SCRIPT_TYPE)
+        script_type: Literal["script", "notebook"] | None = None
+        if script_type_str == "script":
+            script_type = "script"
+        elif script_type_str == "notebook":
+            script_type = "notebook"
+        elif script_type_str is not None:
+            log.warning(
+                f"Unknown script type '{script_type_str}', expected 'script' or 'notebook'"
+            )
+
         return cls(
             session_id=session_id,
             session_dir=Path(session_dir),
             snapshot_dir=Path(snapshot_dir) if snapshot_dir else None,
             snapshot_modules=snapshot_modules.split(",") if snapshot_modules else None,
             is_worker_script=bool(int(os.environ.get(_env.IS_WORKER_SCRIPT, "0"))),
+            main_script_path=Path(p)
+            if (p := os.environ.get(_env.MAIN_SCRIPT_PATH))
+            else None,
+            main_script_type=script_type,
             submit_base_dir=Path(p)
             if (p := os.environ.get(_env.SUBMIT_BASE_DIR))
             else None,

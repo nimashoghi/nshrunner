@@ -68,6 +68,9 @@ class Config(C.Config):
     snapshot: bool | nshsnap.SnapshotConfig = False
     """Snapshot configuration for the session."""
 
+    save_main_script: bool = True
+    """Whether to save the main script or notebook that's being executed."""
+
     def _resolve_seed_config(self):
         if self.seed is None:
             return None
@@ -169,6 +172,23 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             **(self.config.env or {}),
             **(env or {}),
         }
+
+        # Save the main script if enabled
+        if self.config.save_main_script:
+            from ._util.script_detector import save_main_script
+
+            script_dir = gitignored_dir(session_dir / "main_script", create=True)
+            saved_path, script_type = save_main_script(script_dir)
+
+            if saved_path is not None and script_type is not None:
+                # Add the script information to the environment
+                session.env[_env.MAIN_SCRIPT_PATH] = str(
+                    saved_path.resolve().absolute()
+                )
+                session.env[_env.MAIN_SCRIPT_TYPE] = script_type
+                log.info(f"Saved main {script_type} to {saved_path}")
+            else:
+                log.warning("Failed to detect and save the main script/notebook")
 
         # Take a snapshot of the environment if needed
         if snapshot := self.config.snapshot:

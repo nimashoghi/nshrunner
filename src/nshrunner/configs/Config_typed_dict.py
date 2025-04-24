@@ -38,10 +38,16 @@ class SnapshotConfig(typ.TypedDict, total=False):
 
 # Schema entries
 class ConfigTypedDict(typ.TypedDict, total=False):
-    working_dir: str | str | None
+    working_dir: (
+        str | str | typ.Literal["cwd"] | typ.Literal["tmp"] | typ.Literal["home-cache"]
+    )
     """The `working_dir` parameter is a string that represents the directory where the program will save its execution files and logs.
-        This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
-        If `None`, this will default to the current working directory / `nshrunner`."""
+    This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
+    
+    Accepted values are:
+    - "cwd": The current working directory.
+    - "tmp": The temporary directory.
+    - "home-cache" (default): The cache directory in the user's home directory (i.e., `~/.cache/nshrunner`)."""
 
     seed: int | SeedConfig | None
     """Seed configuration for the runner."""
@@ -51,6 +57,9 @@ class ConfigTypedDict(typ.TypedDict, total=False):
 
     snapshot: bool | SnapshotConfig
     """Snapshot configuration for the session."""
+
+    save_main_script: bool
+    """Whether to save the main script or notebook that's being executed."""
 
 
 @typ.overload
