@@ -71,6 +71,9 @@ class Config(C.Config):
     save_main_script: bool = True
     """Whether to save the main script or notebook that's being executed."""
 
+    save_git_diff: bool = True
+    """Whether to save the git diff if the current directory is in a git repository."""
+
     def _resolve_seed_config(self):
         if self.seed is None:
             return None
@@ -173,32 +176,12 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             **(env or {}),
         }
 
-        # Save the main script if enabled
-        if self.config.save_main_script:
-            from ._util.script_detector import save_main_script
-
-            script_dir = gitignored_dir(session_dir / "main_script", create=True)
-            saved_path, script_type = save_main_script(script_dir)
-
-            if saved_path is not None and script_type is not None:
-                # Add the script information to the environment
-                session.env[_env.MAIN_SCRIPT_PATH] = str(
-                    saved_path.resolve().absolute()
-                )
-                session.env[_env.MAIN_SCRIPT_TYPE] = script_type
-                log.info(f"Saved main {script_type} to {saved_path}")
-            else:
-                log.warning("Failed to detect and save the main script/notebook")
-
         # Take a snapshot of the environment if needed
         if snapshot := self.config.snapshot:
             # If the snapshot is not a SnapshotConfig object, create one
             if not isinstance(snapshot, nshsnap.SnapshotConfig):
                 if snapshot is True:
                     snapshot = {}
-
-                # Merge the default snapshot kwargs
-                snapshot = {**snapshot}
 
                 # If the save directory is not set, set it to the session directory
                 if not snapshot.get("snapshot_dir"):
@@ -209,6 +192,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
             session.snapshot = nshsnap.snapshot(snapshot)
             snapshot_path_str = str(session.snapshot.snapshot_dir.absolute())
+
             # Update the environment to include the snapshot path and
             # prepend the new PYTHONPATH to the env dict.
             session.env = {
@@ -217,6 +201,29 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
                 _env.SNAPSHOT_DIR: snapshot_path_str,
                 _env.SNAPSHOT_MODULES: ",".join(session.snapshot.modules),
             }
+
+        # Create code directory and save main script/git diff as configured
+        from ._util.code_saving import setup_code_directory
+
+        result = setup_code_directory(
+            session_dir,
+            session.snapshot,
+            save_main_script=self.config.save_main_script,
+            save_git_diff=self.config.save_git_diff,
+        )
+
+        # Add information to environment
+        session.env[_env.CODE_DIR] = str(result.code_dir.resolve().absolute())
+        if result.saved_script_path is not None:
+            session.env[_env.MAIN_SCRIPT_PATH] = str(
+                result.saved_script_path.resolve().absolute()
+            )
+        if result.script_type is not None:
+            session.env[_env.MAIN_SCRIPT_TYPE] = result.script_type
+        if result.git_diff_path is not None:
+            session.env[_env.GIT_DIFF_PATH] = str(
+                result.git_diff_path.resolve().absolute()
+            )
 
         return runs, session
 

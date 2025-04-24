@@ -61,6 +61,9 @@ class ConfigTypedDict(typ.TypedDict, total=False):
     save_main_script: bool
     """Whether to save the main script or notebook that's being executed."""
 
+    save_git_diff: bool
+    """Whether to save the git diff if the current directory is in a git repository."""
+
 
 @typ.overload
 def CreateConfig(**dict: typ.Unpack[ConfigTypedDict]) -> Config: ...

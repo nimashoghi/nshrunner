@@ -122,6 +122,20 @@ class Session:
         return None
 
     @cached_property
+    def code_dir(self) -> Path | None:
+        """Directory containing saved code and related artifacts."""
+        if path := os.environ.get(_env.CODE_DIR):
+            return Path(path)
+        return None
+
+    @cached_property
+    def git_diff_path(self) -> Path | None:
+        """Path to the saved git diff file, if available."""
+        if path := os.environ.get(_env.GIT_DIFF_PATH):
+            return Path(path)
+        return None
+
+    @cached_property
     def submit_base_dir(self) -> Path | None:
         """Base directory for job submission, if applicable."""
         if path := os.environ.get(_env.SUBMIT_BASE_DIR):
