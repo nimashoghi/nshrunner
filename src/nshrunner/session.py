@@ -3,11 +3,11 @@ from __future__ import annotations
 import logging
 import os
 import signal
-from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Literal
 
-from typing_extensions import assert_never
+from typing_extensions import assert_never, override
 
 from . import _env
 
@@ -27,57 +27,43 @@ def _get_signal(env_var: str):
         return None
 
 
-@dataclass
 class Session:
     """Represents the current Runner execution session."""
 
-    session_id: str
-    """Unique identifier for the current session."""
+    def __init__(self, session_id: str, session_dir: Path):
+        """Initialize a Session with the required fields.
 
-    session_dir: Path
-    """Directory path for the current session."""
+        Args:
+            session_id: Unique identifier for the current session.
+            session_dir: Directory path for the current session.
+        """
+        self.session_id = session_id
+        """Unique identifier for the current session."""
 
-    snapshot_dir: Path | None
-    """Directory path for the snapshot, if available."""
+        self.session_dir = session_dir
+        """Directory path for the current session."""
 
-    snapshot_modules: list[str] | None
-    """List of snapshot modules, if available."""
+    @override
+    def __repr__(self) -> str:
+        """Return a string representation of the Session.
 
-    is_worker_script: bool
-    """Indicates if this is running as a worker script."""
+        Only includes required fields and any cached properties that have been accessed.
+        """
+        # Always include required fields
+        parts = [
+            f"session_id={self.session_id!r}",
+            f"session_dir={self.session_dir!r}",
+        ]
 
-    main_script_path: Path | None
-    """Path to the saved main script or notebook, if available."""
+        # Include any cached properties that have been accessed
+        for attr_name in dir(self.__class__):
+            if isinstance(getattr(self.__class__, attr_name, None), cached_property):
+                # Check if this property has been accessed and cached
+                if attr_name in self.__dict__:
+                    value = self.__dict__[attr_name]
+                    parts.append(f"{attr_name}={value!r}")
 
-    main_script_type: Literal["script", "notebook"] | None
-    """Type of the main script (Python script or Jupyter notebook), if available."""
-
-    submit_base_dir: Path | None
-    """Base directory for job submission, if applicable."""
-
-    submit_job_index: int | None
-    """Index of the current job in a job array, if applicable."""
-
-    submit_timeout_signal: signal.Signals | None
-    """Signal number to be used for job timeout, if specified."""
-
-    submit_preempt_signal: signal.Signals | None
-    """Signal number to be used for job preemption, if specified."""
-
-    submit_local_rank: int | None
-    """Local rank of the current process, if applicable."""
-
-    submit_global_rank: int | None
-    """Global rank of the current process, if applicable."""
-
-    submit_world_size: int | None
-    """Total number of processes in the job, if applicable."""
-
-    exit_script_dir: Path | None
-    """Directory for exit scripts, if specified."""
-
-    submit_interface_module: str | None
-    """Name of the submit interface module, if specified."""
+        return f"Session({', '.join(parts)})"
 
     @classmethod
     def from_current_session(cls):
@@ -90,53 +76,107 @@ class Session:
         if not (session_dir := os.environ.get(_env.SESSION_DIR)):
             return None
 
-        snapshot_dir = os.environ.get(_env.SNAPSHOT_DIR)
-        snapshot_modules = os.environ.get(_env.SNAPSHOT_MODULES)
+        return cls(
+            session_id=session_id,
+            session_dir=Path(session_dir),
+        )
 
-        # Get script type and validate it's either "script", "notebook", or None
+    @cached_property
+    def snapshot_dir(self) -> Path | None:
+        """Directory path for the snapshot, if available."""
+        if snapshot_dir := os.environ.get(_env.SNAPSHOT_DIR):
+            return Path(snapshot_dir)
+        return None
+
+    @cached_property
+    def snapshot_modules(self) -> list[str] | None:
+        """List of snapshot modules, if available."""
+        if snapshot_modules := os.environ.get(_env.SNAPSHOT_MODULES):
+            return snapshot_modules.split(",")
+        return None
+
+    @cached_property
+    def is_worker_script(self) -> bool:
+        """Indicates if this is running as a worker script."""
+        return bool(int(os.environ.get(_env.IS_WORKER_SCRIPT, "0")))
+
+    @cached_property
+    def main_script_path(self) -> Path | None:
+        """Path to the saved main script or notebook, if available."""
+        if path := os.environ.get(_env.MAIN_SCRIPT_PATH):
+            return Path(path)
+        return None
+
+    @cached_property
+    def main_script_type(self) -> Literal["script", "notebook"] | None:
+        """Type of the main script (Python script or Jupyter notebook), if available."""
         script_type_str = os.environ.get(_env.MAIN_SCRIPT_TYPE)
-        script_type: Literal["script", "notebook"] | None = None
         if script_type_str == "script":
-            script_type = "script"
+            return "script"
         elif script_type_str == "notebook":
-            script_type = "notebook"
+            return "notebook"
         elif script_type_str is not None:
             log.warning(
                 f"Unknown script type '{script_type_str}', expected 'script' or 'notebook'"
             )
+        return None
 
-        return cls(
-            session_id=session_id,
-            session_dir=Path(session_dir),
-            snapshot_dir=Path(snapshot_dir) if snapshot_dir else None,
-            snapshot_modules=snapshot_modules.split(",") if snapshot_modules else None,
-            is_worker_script=bool(int(os.environ.get(_env.IS_WORKER_SCRIPT, "0"))),
-            main_script_path=Path(p)
-            if (p := os.environ.get(_env.MAIN_SCRIPT_PATH))
-            else None,
-            main_script_type=script_type,
-            submit_base_dir=Path(p)
-            if (p := os.environ.get(_env.SUBMIT_BASE_DIR))
-            else None,
-            submit_job_index=int(job_index)
-            if (job_index := os.environ.get(_env.SUBMIT_JOB_INDEX))
-            else None,
-            submit_timeout_signal=_get_signal(_env.SUBMIT_TIMEOUT_SIGNAL),
-            submit_preempt_signal=_get_signal(_env.SUBMIT_PREEMPT_SIGNAL),
-            submit_local_rank=int(rank)
-            if (rank := os.environ.get(_env.SUBMIT_LOCAL_RANK))
-            else None,
-            submit_global_rank=int(rank)
-            if (rank := os.environ.get(_env.SUBMIT_GLOBAL_RANK))
-            else None,
-            submit_world_size=int(size)
-            if (size := os.environ.get(_env.SUBMIT_WORLD_SIZE))
-            else None,
-            exit_script_dir=Path(p)
-            if (p := os.environ.get(_env.EXIT_SCRIPT_DIR))
-            else None,
-            submit_interface_module=os.environ.get(_env.SUBMIT_INTERFACE_MODULE),
-        )
+    @cached_property
+    def submit_base_dir(self) -> Path | None:
+        """Base directory for job submission, if applicable."""
+        if path := os.environ.get(_env.SUBMIT_BASE_DIR):
+            return Path(path)
+        return None
+
+    @cached_property
+    def submit_job_index(self) -> int | None:
+        """Index of the current job in a job array, if applicable."""
+        if job_index := os.environ.get(_env.SUBMIT_JOB_INDEX):
+            return int(job_index)
+        return None
+
+    @cached_property
+    def submit_timeout_signal(self) -> signal.Signals | None:
+        """Signal number to be used for job timeout, if specified."""
+        return _get_signal(_env.SUBMIT_TIMEOUT_SIGNAL)
+
+    @cached_property
+    def submit_preempt_signal(self) -> signal.Signals | None:
+        """Signal number to be used for job preemption, if specified."""
+        return _get_signal(_env.SUBMIT_PREEMPT_SIGNAL)
+
+    @cached_property
+    def submit_local_rank(self) -> int | None:
+        """Local rank of the current process, if applicable."""
+        if rank := os.environ.get(_env.SUBMIT_LOCAL_RANK):
+            return int(rank)
+        return None
+
+    @cached_property
+    def submit_global_rank(self) -> int | None:
+        """Global rank of the current process, if applicable."""
+        if rank := os.environ.get(_env.SUBMIT_GLOBAL_RANK):
+            return int(rank)
+        return None
+
+    @cached_property
+    def submit_world_size(self) -> int | None:
+        """Total number of processes in the job, if applicable."""
+        if size := os.environ.get(_env.SUBMIT_WORLD_SIZE):
+            return int(size)
+        return None
+
+    @cached_property
+    def exit_script_dir(self) -> Path | None:
+        """Directory for exit scripts, if specified."""
+        if path := os.environ.get(_env.EXIT_SCRIPT_DIR):
+            return Path(path)
+        return None
+
+    @cached_property
+    def submit_interface_module(self) -> str | None:
+        """Name of the submit interface module, if specified."""
+        return os.environ.get(_env.SUBMIT_INTERFACE_MODULE)
 
     def write_exit_script(
         self,
