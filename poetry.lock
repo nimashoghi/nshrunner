@@ -354,6 +354,40 @@ files = [
 tests = ["asttokens (>=2.1.0)", "coverage", "coverage-enable-subprocess", "ipython", "littleutils", "pytest", "rich ; python_version >= \"3.11\""]
 
 [[package]]
+name = "gitdb"
+version = "4.0.12"
+description = "Git Object Database"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "gitdb-4.0.12-py3-none-any.whl", hash = "sha256:67073e15955400952c6565cc3e707c554a4eea2e428946f7a4c162fab9bd9bcf"},
+    {file = "gitdb-4.0.12.tar.gz", hash = "sha256:5ef71f855d191a3326fcfbc0d5da835f26b13fbcba60c32c21091c349ffdb571"},
+]
+
+[package.dependencies]
+smmap = ">=3.0.1,<6"
+
+[[package]]
+name = "gitpython"
+version = "3.1.44"
+description = "GitPython is a Python library used to interact with Git repositories"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "GitPython-3.1.44-py3-none-any.whl", hash = "sha256:9e0e10cda9bed1ee64bc9a6de50e7e38a9c9943241cd7f585f6df3ed28011110"},
+    {file = "gitpython-3.1.44.tar.gz", hash = "sha256:c87e30b26253bf5418b01b0660f818967f3c503193838337fe5e573331249269"},
+]
+
+[package.dependencies]
+gitdb = ">=4.0.1,<5"
+
+[package.extras]
+doc = ["sphinx (>=7.1.2,<7.2)", "sphinx-autodoc-typehints", "sphinx_rtd_theme"]
+test = ["coverage[toml]", "ddt (>=1.1.1,!=1.4.3)", "mock ; python_version < \"3.8\"", "mypy", "pre-commit", "pytest (>=7.3.1)", "pytest-cov", "pytest-instafail", "pytest-mock", "pytest-sugar", "typing-extensions ; python_version < \"3.11\""]
+
+[[package]]
 name = "iniconfig"
 version = "2.1.0"
 description = "brain-dead simple config-ini parsing"
@@ -584,14 +618,14 @@ files = [
 
 [[package]]
 name = "nshconfig"
-version = "0.40.0"
+version = "0.42.4"
 description = "Fully typed configuration management, powered by Pydantic"
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "nshconfig-0.40.0-py3-none-any.whl", hash = "sha256:88c187afa6231e49954ea079c7743a83805c8c535b1f2157dba4bed4a5866adc"},
-    {file = "nshconfig-0.40.0.tar.gz", hash = "sha256:78824d0b116d73977caa300a312673293db12649165fd78c61c22ec60bd28ee0"},
+    {file = "nshconfig-0.42.4-py3-none-any.whl", hash = "sha256:963579343b12dd41996acaccaaca756188454740733a6aafb33021c524f751d5"},
+    {file = "nshconfig-0.42.4.tar.gz", hash = "sha256:3e571b6ba9a016df113c8d88d2e1c5b7d7af66336c6e236d659ef7a18729cacb"},
 ]
 
 [package.dependencies]
@@ -605,14 +639,14 @@ yaml = ["pydantic-yaml"]
 
 [[package]]
 name = "nshsnap"
-version = "0.12.0"
+version = "0.12.1"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "nshsnap-0.12.0-py3-none-any.whl", hash = "sha256:714adfd240f18bdd13112144754aee2c5e94bfb00afa1a81b5015233ffa389fe"},
-    {file = "nshsnap-0.12.0.tar.gz", hash = "sha256:796c2b55d30f104209e1935904394d00ecf456d190f2f100c5646858c7e05fa4"},
+    {file = "nshsnap-0.12.1-py3-none-any.whl", hash = "sha256:7efe4d4f2d04d182487e0249731969e92fede47cad90fd8ea61bab01ceedb5e2"},
+    {file = "nshsnap-0.12.1.tar.gz", hash = "sha256:3f161b51f8e867044c0b600d1da60e07d63a96c9bd56e684e23b56a839ca3234"},
 ]
 
 [package.dependencies]
@@ -1171,6 +1205,18 @@ files = [
 ]
 
 [[package]]
+name = "smmap"
+version = "5.0.2"
+description = "A pure Python implementation of a sliding window memory map manager"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "smmap-5.0.2-py3-none-any.whl", hash = "sha256:b30115f0def7d7531d22a0fb6502488d879e75b260a9db4d0819cfb25403af5e"},
+    {file = "smmap-5.0.2.tar.gz", hash = "sha256:26ea65a03958fa0c8a1c7e8c7a58fdc77221b8910f6be2131affade476898ad5"},
+]
+
+[[package]]
 name = "stack-data"
 version = "0.6.3"
 description = "Extract data from python stack frames and tracebacks for informative displays"
@@ -1361,4 +1407,4 @@ extra = []
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "221977e62317b1275d351b0751161108dce3e43ba86e515f4468c41694024de4"
+content-hash = "b1e1e49c111584f548dd44fef5c2847c768e08b59e33c64320f45d632f8e0849"
