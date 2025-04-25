@@ -5,7 +5,6 @@ import logging
 import sys
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Generic, cast
 
@@ -23,27 +22,13 @@ from ._util.environment import (
     remove_wandb_environment_variables,
     with_env,
 )
+from .submission import Submission
 
 log = logging.getLogger(__name__)
 
 
 TArguments = TypeVarTuple("TArguments")
 TReturn = TypeVar("TReturn", infer_variance=True)
-
-
-@dataclass
-class _Session:
-    id: str
-    """The ID of the session."""
-
-    dir_path: Path
-    """The path to the session directory."""
-
-    env: dict[str, str] = field(default_factory=lambda: {})
-    """Environment variables to set for the session."""
-
-    snapshot: nshsnap.SnapshotInfo | None = None
-    """The snapshot information for the session."""
 
 
 T = TypeVar("T", infer_variance=True)
@@ -98,7 +83,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
     def _wrapped_run_fn(self):
         return _wrap_run_fn(self.config, self.run_fn)
 
-    def _setup_session(
+    def _setup_submission(
         self,
         runs: Iterable[tuple[Unpack[TArguments]]],
         id: str | None = None,
@@ -111,18 +96,18 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         if id is None:
             id = self.generate_id()
 
-        # Create the session directory
+        # Create the submission directory
         working_dir = gitignored_dir(self.config._resolve_working_dir())
         session_dir = gitignored_dir(working_dir / id, create=True)
 
-        # Create the session object (to return)
-        session = _Session(id=id, dir_path=session_dir)
+        # Create the submission object (to return)
+        submission = Submission(id=id, dir_path=session_dir)
 
         # Resolve the environment
-        session.env = {
+        submission.env = {
             _env.SESSION_ID: id,
-            _env.SESSION_DIR: str(session.dir_path.resolve().absolute()),
-            **session.env,
+            _env.SESSION_DIR: str(submission.dir_path.resolve().absolute()),
+            **submission.env,
             **(self.config.env or {}),
             **(env or {}),
         }
@@ -134,17 +119,17 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
             if not isinstance(snapshot, nshsnap.SnapshotInfo):
                 snapshot = nshsnap.snapshot(snapshot)
 
-            # Set the snapshot in the session
-            session.snapshot = snapshot
-            snapshot_path_str = str(session.snapshot.snapshot_dir.absolute())
+            # Set the snapshot in the submission
+            submission.snapshot = snapshot
+            snapshot_path_str = str(submission.snapshot.snapshot_dir.absolute())
 
             # Update the environment to include the snapshot path and
             # prepend the new PYTHONPATH to the env dict.
-            session.env = {
+            submission.env = {
                 "PYTHONPATH": f"{snapshot_path_str}:$PYTHONPATH",
-                **session.env,
+                **submission.env,
                 _env.SNAPSHOT_DIR: snapshot_path_str,
-                _env.SNAPSHOT_MODULES: ",".join(session.snapshot.modules),
+                _env.SNAPSHOT_MODULES: ",".join(submission.snapshot.modules),
             }
 
         # Create code directory and save main script/git diff as configured
@@ -152,25 +137,25 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         result = setup_code_directory(
             session_dir,
-            session.snapshot,
+            submission.snapshot,
             save_main_script=self.config.save_main_script,
             save_git_diff=self.config.save_git_diff,
         )
 
         # Add information to environment
-        session.env[_env.CODE_DIR] = str(result.code_dir.resolve().absolute())
+        submission.env[_env.CODE_DIR] = str(result.code_dir.resolve().absolute())
         if result.saved_script_path is not None:
-            session.env[_env.MAIN_SCRIPT_PATH] = str(
+            submission.env[_env.MAIN_SCRIPT_PATH] = str(
                 result.saved_script_path.resolve().absolute()
             )
         if result.script_type is not None:
-            session.env[_env.MAIN_SCRIPT_TYPE] = result.script_type
+            submission.env[_env.MAIN_SCRIPT_TYPE] = result.script_type
         if result.git_diff_path is not None:
-            session.env[_env.GIT_DIFF_PATH] = str(
+            submission.env[_env.GIT_DIFF_PATH] = str(
                 result.git_diff_path.resolve().absolute()
             )
 
-        return runs, session
+        return runs, submission
 
     def local_generator(
         self,
@@ -178,8 +163,8 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         *,
         env: Mapping[str, str] | None = None,
     ):
-        runs, session = self._setup_session(runs, env=env)
-        with with_env(session.env):
+        runs, submission = self._setup_submission(runs, env=env)
+        with with_env(submission.env):
             for args in _tqdm_if_installed(runs):
                 yield self._wrapped_run_fn(*args)
 
@@ -205,14 +190,14 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         print_command: bool = True,
     ):
         # Resolve all runs
-        runs, session = self._setup_session(runs, env=env)
-        base_dir = session.dir_path / "submit"
+        runs, submission = self._setup_submission(runs, env=env)
+        base_dir = submission.dir_path / "submit"
         base_dir.mkdir(parents=True, exist_ok=True)
 
         # Update the job options
         options = screen.update_options(options, base_dir)
 
-        # Use setup commands to directly put env/pythonpath into the session bash script
+        # Use setup commands to directly put env/pythonpath into the submission bash script
         setup_commands_pre: list[str] = []
         if activate_venv:
             setup_commands_pre.append("echo 'Activating environment'")
@@ -227,7 +212,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         del setup_commands_pre
 
         # Merge the environment
-        env = {**session.env, **options.get("environment", {})}
+        env = {**submission.env, **options.get("environment", {})}
 
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
@@ -245,7 +230,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         )
 
         # Create the submission script
-        submission = screen.to_array_batch_script(
+        submission.script = screen.to_array_batch_script(
             command,
             script_path=base_dir / "submit.sh",
             config=options,
@@ -256,7 +241,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         if print_command:
             log.critical("Run the following command to submit the jobs:\n\n")
             # We print the command but log the rest so the user can pipe the command to bash
-            print(f"{submission.command_str}\n\n")
+            print(f"{submission.script.command_str}\n\n")
 
         return submission
 
@@ -274,14 +259,14 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         print_command: bool = True,
     ):
         # Resolve all runs
-        runs, session = self._setup_session(runs, env=env)
-        base_dir = session.dir_path / "submit"
+        runs, submission = self._setup_submission(runs, env=env)
+        base_dir = submission.dir_path / "submit"
         base_dir.mkdir(parents=True, exist_ok=True)
 
         # Update the SLURM options
         options = slurm.update_options(options, base_dir)
 
-        # Use setup commands to directly put env/pythonpath into the session bash script
+        # Use setup commands to directly put env/pythonpath into the submission bash script
         setup_commands_pre: list[str] = []
         if activate_venv:
             setup_commands_pre.append("echo 'Activating environment'")
@@ -296,7 +281,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         del setup_commands_pre
 
         # Merge the environment
-        env = {**session.env, **options.get("environment", {})}
+        env = {**submission.env, **options.get("environment", {})}
 
         # Convert runs to commands using picklerunner
         from .picklerunner.create import callable_to_command
@@ -311,7 +296,7 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         )
 
         # Create the submission script
-        submission = slurm.to_array_batch_script(
+        submission.script = slurm.to_array_batch_script(
             command,
             script_path=base_dir / "submit.sh",
             num_jobs=len(runs),
@@ -323,6 +308,6 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
         if print_command:
             log.critical("Run the following command to submit the jobs:\n\n")
             # We print the command but log the rest so the user can pipe the command to bash
-            print(f"{submission.command_str}\n\n")
+            print(f"{submission.script.command_str}\n\n")
 
         return submission

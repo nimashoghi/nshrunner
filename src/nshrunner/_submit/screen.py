@@ -12,7 +12,7 @@ from typing_extensions import TypeAliasType, TypedDict
 
 from .. import _env
 from ._util import (
-    Submission,
+    SubmissionScript,
     emit_on_exit_commands,
     set_default_envs,
     write_run_metadata_commands,
@@ -267,7 +267,7 @@ def to_array_batch_script(
     script_path: Path,
     config: ScreenJobKwargs,
     env: Mapping[str, str],
-) -> Submission:
+) -> SubmissionScript:
     """
     Create the batch script for the job.
     """
@@ -294,7 +294,7 @@ def to_array_batch_script(
     )
     script_path.chmod(0o755)
 
-    return Submission(
+    return SubmissionScript(
         command_parts=_launch_session(
             session_command=["bash", str(script_path.resolve().absolute())],
             log_file=Path(log_file)

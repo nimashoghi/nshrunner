@@ -15,7 +15,7 @@ from typing_extensions import TypeAliasType, TypedDict
 
 from .. import _env
 from ._util import (
-    Submission,
+    SubmissionScript,
     emit_on_exit_commands,
     set_default_envs,
     write_run_metadata_commands,
@@ -620,7 +620,7 @@ def to_array_batch_script(
     num_jobs: int,
     config: SlurmJobKwargs,
     env: Mapping[str, str],
-) -> Submission:
+) -> SubmissionScript:
     """
     Create the batch script for the job.
     """
@@ -647,7 +647,7 @@ def to_array_batch_script(
         job_array_n_jobs=num_jobs,
     )
     script_path = script_path.resolve().absolute()
-    return Submission(
+    return SubmissionScript(
         command_parts=["sbatch", f"{script_path}"],
         script_path=script_path,
     )

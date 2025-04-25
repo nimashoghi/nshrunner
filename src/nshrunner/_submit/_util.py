@@ -8,6 +8,8 @@ from io import TextIOWrapper
 from pathlib import Path
 from typing import Any
 
+from typing_extensions import override
+
 from .. import _env
 
 SUBMISSION_META_FILE = "submission.json"
@@ -15,7 +17,7 @@ RUN_META_FILE = "run.json"
 
 
 @dataclass(frozen=True)
-class Submission:
+class SubmissionScript:
     command_parts: list[str]
     script_path: Path
 
@@ -37,6 +39,10 @@ class Submission:
             else:
                 quoted_parts.append(part)
         return " ".join(quoted_parts)
+
+    @override
+    def __str__(self) -> str:
+        return self.command_str
 
 
 def write_submission_meta(

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Literal
 from typing_extensions import Unpack
 
 from ._runner import Runner, TArguments, TReturn
-from ._submit._util import Submission
+from .submission import Submission
 
 if TYPE_CHECKING:
     from . import configs

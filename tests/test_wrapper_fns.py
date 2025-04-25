@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, cast
+import types
 
 from nshrunner.wrapper_fns import submit_parallel_screen
 
@@ -36,7 +36,10 @@ def test_submit_parallel_screen_partitioning():
             self.config = config
 
         def session(self, partition, kwargs):
-            return {"partition": partition, "kwargs": kwargs}
+            # Return an object with partition, kwargs, and snapshot attributes
+            return types.SimpleNamespace(
+                partition=partition, kwargs=kwargs, snapshot=None
+            )
 
     original_runner = wrapper_fns.Runner
     wrapper_fns.Runner = DummyRunner
@@ -52,10 +55,10 @@ def test_submit_parallel_screen_partitioning():
             args_list[1::2],  # [ (1,), (3,), (5,) ]
         ]
         for sub, expected in zip(submissions, expected_partitions):
-            sub = cast(Any, sub)
-            assert (
-                sub["partition"] == expected
-            ), f"Expected {expected}, got {sub['partition']}"
+            # No longer need cast(Any, sub) as it's a SimpleNamespace
+            assert getattr(sub, "partition") == expected, (
+                f"Expected {expected}, got {getattr(sub, 'partition')}"
+            )
     finally:
         wrapper_fns.Runner = original_runner
 
@@ -70,7 +73,10 @@ def test_submit_parallel_screen_block_scheduling():
             self.config = config
 
         def session(self, partition, kwargs):
-            return {"partition": partition, "kwargs": kwargs}
+            # Return an object with partition, kwargs, and snapshot attributes
+            return types.SimpleNamespace(
+                partition=partition, kwargs=kwargs, snapshot=None
+            )
 
     original_runner = wrapper_fns.Runner
     wrapper_fns.Runner = DummyRunner
@@ -86,9 +92,9 @@ def test_submit_parallel_screen_block_scheduling():
             args_list[3:6],  # [(3,), (4,), (5,)]
         ]
         for sub, expected in zip(submissions, expected_partitions):
-            sub = cast(Any, sub)
-            assert (
-                sub["partition"] == expected
-            ), f"Expected {expected}, got {sub['partition']}"
+            # No longer need cast(Any, sub) as it's a SimpleNamespace
+            assert getattr(sub, "partition") == expected, (
+                f"Expected {expected}, got {getattr(sub, 'partition')}"
+            )
     finally:
         wrapper_fns.Runner = original_runner
