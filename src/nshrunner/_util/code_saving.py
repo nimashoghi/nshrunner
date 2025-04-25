@@ -6,14 +6,30 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
-from nshsnap import SnapshotInfo
 
-from .git import gitignored_dir
+if TYPE_CHECKING:
+    from nshsnap import SnapshotInfo
 
 log = logging.getLogger(__name__)
+
+
+def gitignored_dir(path: Path, *, create: bool = True) -> Path:
+    if create:
+        if not path.exists():
+            log.debug(f"Creating gitignored directory {path}")
+        path.mkdir(exist_ok=True, parents=True)
+
+    if not path.is_dir():
+        raise ValueError(f"{path} is not a directory")
+
+    if not (gitignore_path := path / ".gitignore").exists():
+        gitignore_path.touch()
+        gitignore_path.write_text("*\n")
+
+    return path
 
 
 def _get_executed_notebook_code() -> str | None:
@@ -284,13 +300,15 @@ def resolve_code_directory(session_dir: Path) -> Path:
     return code_dir
 
 
-def _create_snapshot_copy(snapshot: SnapshotInfo, code_dir: Path) -> Path | None:
+def _create_snapshot_copy(
+    snapshot: SnapshotInfo, snapshot_copy_path: Path
+) -> Path | None:
     """
     Copy the directory that contains snapshot modules.
 
     Args:
         snapshot: Snapshot information containing the directory
-        code_dir: The code directory where snapshot should be copied
+        snapshot_copy_path: The path where the snapshot should be copied
 
     Returns:
         The path to the copied snapshot directory if successful, None otherwise
@@ -299,7 +317,6 @@ def _create_snapshot_copy(snapshot: SnapshotInfo, code_dir: Path) -> Path | None
         log.debug(f"Snapshot directory {snapshot_dir_path} does not exist")
         return None
 
-    snapshot_copy_path = code_dir / "snapshot"
     # Check if directory already exists at the destination and remove it if necessary
     if snapshot_copy_path.exists():
         try:
@@ -440,11 +457,17 @@ def setup_code_directory(
 
     # Create copy of snapshots if available
     if snapshot is not None:
+        snapshot_copy_path = code_dir / "snapshot"
         # By default, our snapshot directory is already inside the code directory,
         # so we only need to copy the snapshot directory if it's not the same as the code directory.
-        if snapshot.snapshot_dir != code_dir:
-            log.debug(f"Creating snapshot copy in {code_dir}")
-            _create_snapshot_copy(snapshot, code_dir)
+        if (
+            snapshot.snapshot_dir.resolve().absolute()
+            != snapshot_copy_path.resolve().absolute()
+        ):
+            log.debug(
+                f"Creating snapshot copy as {snapshot.snapshot_dir=} != {snapshot_copy_path=}"
+            )
+            _create_snapshot_copy(snapshot, snapshot_copy_path)
         else:
             log.debug(
                 "Snapshot directory is the same as code directory, no copy needed"

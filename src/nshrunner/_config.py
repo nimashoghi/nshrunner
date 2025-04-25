@@ -9,7 +9,6 @@ import nshconfig as C
 import nshsnap
 
 from ._seed import SeedConfig
-from ._util.git import gitignored_dir
 
 log = logging.getLogger(__name__)
 
@@ -72,8 +71,9 @@ class Config(C.Config):
         if snapshot.snapshot_dir is None:
             # Let's set the default snapshot directory to be inside the "code" directory
             # within the session directory.
-            from ._util.code_saving import resolve_code_directory
+            from ._util.code_saving import gitignored_dir, resolve_code_directory
 
             code_dir = resolve_code_directory(session_dir)
             snapshot.snapshot_dir = gitignored_dir(code_dir / "snapshot", create=True)
+            log.info(f"Setting default snapshot directory: {snapshot.snapshot_dir}")
         return snapshot

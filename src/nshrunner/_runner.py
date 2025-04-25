@@ -16,13 +16,13 @@ from . import _env
 from ._config import Config
 from ._seed import seed_everything
 from ._submit import screen, slurm
+from ._util.code_saving import gitignored_dir
 from ._util.env import with_env
 from ._util.environment import (
     remove_nshrunner_environment_variables,
     remove_slurm_environment_variables,
     remove_wandb_environment_variables,
 )
-from ._util.git import gitignored_dir
 
 log = logging.getLogger(__name__)
 
