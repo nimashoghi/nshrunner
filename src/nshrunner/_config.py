@@ -70,5 +70,10 @@ class Config(C.Config):
 
         snapshot = snapshot.model_copy(deep=True)
         if snapshot.snapshot_dir is None:
-            snapshot.snapshot_dir = gitignored_dir(session_dir / "nshsnap", create=True)
+            # Let's set the default snapshot directory to be inside the "code" directory
+            # within the session directory.
+            from ._util.code_saving import resolve_code_directory
+
+            code_dir = resolve_code_directory(session_dir)
+            snapshot.snapshot_dir = gitignored_dir(code_dir / "snapshot", create=True)
         return snapshot

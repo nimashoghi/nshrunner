@@ -11,6 +11,8 @@ from typing import Literal
 from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
 from nshsnap import SnapshotInfo
 
+from .git import gitignored_dir
+
 log = logging.getLogger(__name__)
 
 
@@ -266,9 +268,9 @@ def _save_git_diff(code_dir: Path) -> Path | None:
         return None
 
 
-def _create_code_directory(session_dir: Path) -> Path:
+def resolve_code_directory(session_dir: Path) -> Path:
     """
-    Create a code directory structure for the run.
+    Resolves (and creates if not exists) a code directory structure for the run.
 
     Args:
         session_dir: The directory for the current session
@@ -277,9 +279,7 @@ def _create_code_directory(session_dir: Path) -> Path:
         The path to the created code directory
     """
     # Create the code directory
-    code_dir = session_dir / "code"
-    code_dir.mkdir(parents=True, exist_ok=True)
-
+    code_dir = gitignored_dir(session_dir / "code", create=True)
     log.debug(f"Created code directory at {code_dir}")
     return code_dir
 
@@ -436,11 +436,19 @@ def setup_code_directory(
     log.debug(f"Setting up code directory in {session_dir}")
 
     # Always create the code directory
-    code_dir = _create_code_directory(session_dir)
+    code_dir = resolve_code_directory(session_dir)
 
-    # Create copy ofsnapshots if available
+    # Create copy of snapshots if available
     if snapshot is not None:
-        _create_snapshot_copy(snapshot, code_dir)
+        # By default, our snapshot directory is already inside the code directory,
+        # so we only need to copy the snapshot directory if it's not the same as the code directory.
+        if snapshot.snapshot_dir != code_dir:
+            log.debug(f"Creating snapshot copy in {code_dir}")
+            _create_snapshot_copy(snapshot, code_dir)
+        else:
+            log.debug(
+                "Snapshot directory is the same as code directory, no copy needed"
+            )
 
     # Save git diff if enabled
     git_diff_path: Path | None = None
