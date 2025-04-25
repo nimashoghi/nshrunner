@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Literal
 
+import nshsnap
 from typing_extensions import Unpack
 
 from ._runner import Runner, TArguments, TReturn
@@ -89,6 +90,7 @@ def submit_parallel_screen(
         [int, configs.ScreenBackendConfig], configs.ScreenBackendConfig | None
     ]
     | None = None,
+    use_single_snapshot: bool = True,
 ):
     """Submit function using multiple GNU Screen sessions with per-session configuration overrides.
 
@@ -112,6 +114,8 @@ def submit_parallel_screen(
         A callable that takes the session index and the runner config, and applies modifications.
     screen_config_modifier : callable, optional
         A callable that takes the session index and the screen config, and applies modifications.
+    use_single_snapshot : bool, optional
+        If True, use a single snapshot for all sessions. If False, create a new snapshot for each session.
 
     Returns
     -------
@@ -134,17 +138,34 @@ def submit_parallel_screen(
 
     # Create separate screen sessions for each partition
     submissions: list[Submission] = []
+    prev_snapshot_value = None
+    prev_snapshot: nshsnap.ActiveSnapshot | None = None
     for i in range(num_parallel_screens):
         runner_config_screen = runner_config.model_copy(deep=True)
         screen_config_screen = screen_config.model_copy(deep=True)
 
-        if runner_config_modifier:
-            if (ret := runner_config_modifier(i, runner_config_screen)) is not None:
-                runner_config_screen = ret
+        if (
+            runner_config_modifier
+            and (ret := runner_config_modifier(i, runner_config_screen)) is not None
+        ):
+            runner_config_screen = ret
 
-        if screen_config_modifier:
-            if (ret := screen_config_modifier(i, screen_config_screen)) is not None:
-                screen_config_screen = ret
+        if (
+            screen_config_modifier
+            and (ret := screen_config_modifier(i, screen_config_screen)) is not None
+        ):
+            screen_config_screen = ret
+
+        if use_single_snapshot and i > 0:
+            assert runner_config_screen.snapshot == prev_snapshot_value, (
+                "Inconsistent snapshot values across sessions. "
+                "If you want to use a single snapshot for all sessions, "
+                "you must set the same snapshot value for all sessions. "
+                "Otherwise, set use_single_snapshot=False."
+            )
+            if prev_snapshot is not None:
+                runner_config_screen.snapshot = prev_snapshot
+        prev_snapshot_value = runner_config_screen.snapshot
 
         if scheduling == "round_robin":
             partition = args_list[i::num_parallel_screens]
@@ -159,6 +180,9 @@ def submit_parallel_screen(
             partition, screen_config_screen.to_screen_kwargs()
         )
         submissions.append(submission)
+
+        if use_single_snapshot and submission.snapshot is not None:
+            prev_snapshot = submission.snapshot
 
     return submissions
 
