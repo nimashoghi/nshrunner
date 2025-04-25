@@ -129,7 +129,13 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
 
         # Take a snapshot of the environment if needed
         if (snapshot := self.config._resolve_snapshot_config(session_dir)) is not None:
-            session.snapshot = nshsnap.snapshot(snapshot)
+            # If the snapshot is a SnapshotInfo, this means that a snapshot has already been created
+            # and we are reusing it. Otherwise, we create a new snapshot.
+            if not isinstance(snapshot, nshsnap.SnapshotInfo):
+                snapshot = nshsnap.snapshot(snapshot)
+
+            # Set the snapshot in the session
+            session.snapshot = snapshot
             snapshot_path_str = str(session.snapshot.snapshot_dir.absolute())
 
             # Update the environment to include the snapshot path and

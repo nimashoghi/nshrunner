@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 import nshconfig as C
 import nshsnap
@@ -14,6 +14,8 @@ log = logging.getLogger(__name__)
 
 
 class Config(C.Config):
+    model_config: ClassVar[C.ConfigDict] = {"arbitrary_types_allowed": True}
+
     working_dir: str | Path | Literal["cwd", "tmp", "home-cache"] = "home-cache"
     """
     The `working_dir` parameter is a string that represents the directory where the program will save its execution files and logs.
@@ -32,8 +34,14 @@ class Config(C.Config):
     env: Mapping[str, str] | None = None
     """Environment variables to set for the session."""
 
-    snapshot: bool | nshsnap.SnapshotConfig | None = False
-    """Snapshot configuration for the session."""
+    snapshot: bool | nshsnap.SnapshotConfig | nshsnap.ActiveSnapshot | None = False
+    """Snapshot configuration for the session.
+
+    If `True`, a snapshot will be created with the default configuration.
+    If `False` or `None`, no snapshot will be created.
+    If a `SnapshotConfig` object is provided, it will be used to configure the snapshot.
+    If a `ActiveSnapshot` object is provided, it will re-use the existing snapshot from the given snapshot info.
+    """
 
     save_main_script: bool = True
     """Whether to save the main script or notebook that's being executed."""
@@ -64,6 +72,8 @@ class Config(C.Config):
     def _resolve_snapshot_config(self, session_dir: Path):
         if (snapshot := self.snapshot) in (False, None):
             return None
+        elif isinstance(snapshot, nshsnap.SnapshotInfo):
+            return snapshot
         if snapshot is True:
             snapshot = nshsnap.SnapshotConfig()
 

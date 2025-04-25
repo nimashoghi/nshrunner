@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import nshsnap._config
+import nshsnap._snapshot
 import typing_extensions as typ
+
+import nshrunner._seed
 
 if typ.TYPE_CHECKING:
     from nshrunner._config import Config
@@ -9,9 +13,10 @@ if typ.TYPE_CHECKING:
 __codegen__ = True
 
 # Definitions
+ActiveSnapshot = typ.TypeAliasType("ActiveSnapshot", nshsnap._snapshot.ActiveSnapshot)
 
 
-class SeedConfig(typ.TypedDict, total=False):
+class SeedConfigTypedDict(typ.TypedDict, total=False):
     seed: typ.Required[int]
     """Seed for the random number generator."""
 
@@ -22,7 +27,12 @@ class SeedConfig(typ.TypedDict, total=False):
     """Whether to use Lightning's seed_everything function (if available)."""
 
 
-class SnapshotConfig(typ.TypedDict, total=False):
+SeedConfig = typ.TypeAliasType(
+    "SeedConfig", SeedConfigTypedDict | nshrunner._seed.SeedConfig
+)
+
+
+class SnapshotConfigTypedDict(typ.TypedDict, total=False):
     snapshot_dir: str | None
     """The directory to save snapshots to."""
 
@@ -36,10 +46,18 @@ class SnapshotConfig(typ.TypedDict, total=False):
     """Snapshot all editable modules. Default: `True`."""
 
 
+SnapshotConfig = typ.TypeAliasType(
+    "SnapshotConfig", SnapshotConfigTypedDict | nshsnap._config.SnapshotConfig
+)
+SnapshotModuleInfo = typ.TypeAliasType(
+    "SnapshotModuleInfo", nshsnap._snapshot.SnapshotModuleInfo
+)
+
+
 # Schema entries
 class ConfigTypedDict(typ.TypedDict, total=False):
     working_dir: (
-        str | str | typ.Literal["cwd"] | typ.Literal["tmp"] | typ.Literal["home-cache"]
+        str | typ.Literal["cwd"] | typ.Literal["tmp"] | typ.Literal["home-cache"]
     )
     """The `working_dir` parameter is a string that represents the directory where the program will save its execution files and logs.
     This is used when submitting the program to a SLURM/LSF cluster or when using the `local_sessions` method.
@@ -55,8 +73,13 @@ class ConfigTypedDict(typ.TypedDict, total=False):
     env: dict[str, str] | None
     """Environment variables to set for the session."""
 
-    snapshot: bool | SnapshotConfig | None
-    """Snapshot configuration for the session."""
+    snapshot: bool | SnapshotConfig | ActiveSnapshot | None
+    """Snapshot configuration for the session.
+    
+    If `True`, a snapshot will be created with the default configuration.
+    If `False` or `None`, no snapshot will be created.
+    If a `SnapshotConfig` object is provided, it will be used to configure the snapshot.
+    If a `ActiveSnapshot` object is provided, it will re-use the existing snapshot from the given snapshot info."""
 
     save_main_script: bool
     """Whether to save the main script or notebook that's being executed."""

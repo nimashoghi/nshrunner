@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import typing_extensions as typ
 
+import nshrunner.backends.slurm
+
 if typ.TYPE_CHECKING:
     from nshrunner.backends.slurm import SlurmBackendConfig
 
@@ -19,7 +21,6 @@ Signals = typ.TypeAliasType(
     | typ.Literal[4]
     | typ.Literal[5]
     | typ.Literal[6]
-    | typ.Literal[6]
     | typ.Literal[7]
     | typ.Literal[8]
     | typ.Literal[9]
@@ -30,7 +31,6 @@ Signals = typ.TypeAliasType(
     | typ.Literal[14]
     | typ.Literal[15]
     | typ.Literal[16]
-    | typ.Literal[17]
     | typ.Literal[17]
     | typ.Literal[18]
     | typ.Literal[19]
@@ -44,7 +44,6 @@ Signals = typ.TypeAliasType(
     | typ.Literal[27]
     | typ.Literal[28]
     | typ.Literal[29]
-    | typ.Literal[29]
     | typ.Literal[30]
     | typ.Literal[31]
     | typ.Literal[34]
@@ -52,7 +51,7 @@ Signals = typ.TypeAliasType(
 )
 
 
-class SlurmMailConfig(typ.TypedDict, total=False):
+class SlurmMailConfigTypedDict(typ.TypedDict, total=False):
     """Configuration for email notifications."""
 
     user: typ.Required[str]
@@ -81,6 +80,12 @@ class SlurmMailConfig(typ.TypedDict, total=False):
     - FAIL: Job failure
     - TIME_LIMIT: Job reached time limit
     - ALL: All events."""
+
+
+SlurmMailConfig = typ.TypeAliasType(
+    "SlurmMailConfig",
+    SlurmMailConfigTypedDict | nshrunner.backends.slurm.SlurmMailConfig,
+)
 
 
 # Schema entries

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import typing_extensions as typ
 
+import nshrunner.backends.screen
+
 if typ.TYPE_CHECKING:
     from nshrunner.backends.screen import ScreenBackendConfig
 
@@ -13,7 +15,7 @@ __codegen__ = True
 # Definitions
 
 
-class LoggingConfig(typ.TypedDict, total=False):
+class LoggingConfigTypedDict(typ.TypedDict, total=False):
     """Configuration for screen session logging."""
 
     screen_log_file: str | None
@@ -24,6 +26,11 @@ class LoggingConfig(typ.TypedDict, total=False):
 
     error_file: str | None
     """Path to save stderr from the command."""
+
+
+LoggingConfig = typ.TypeAliasType(
+    "LoggingConfig", LoggingConfigTypedDict | nshrunner.backends.screen.LoggingConfig
+)
 
 
 # Schema entries
