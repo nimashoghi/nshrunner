@@ -284,43 +284,44 @@ def _create_code_directory(session_dir: Path) -> Path:
     return code_dir
 
 
-def _create_snapshot_symlink(snapshot: SnapshotInfo, code_dir: Path) -> Path | None:
+def _create_snapshot_copy(snapshot: SnapshotInfo, code_dir: Path) -> Path | None:
     """
-    Create symlink to dir that contains snapshot modules.
+    Copy the directory that contains snapshot modules.
 
     Args:
         snapshot: Snapshot information containing the directory
-        code_dir: The code directory where symlink should be created
+        code_dir: The code directory where snapshot should be copied
 
     Returns:
-        The path to the created symlink directory if successful, None otherwise
+        The path to the copied snapshot directory if successful, None otherwise
     """
     if not (snapshot_dir_path := Path(snapshot.snapshot_dir)).exists():
         log.debug(f"Snapshot directory {snapshot_dir_path} does not exist")
         return None
 
-    snapshot_symlink_path = (code_dir / "snapshot").resolve().absolute()
-    # Check if a symlink already exists at the destination and remove it if necessary
-    if snapshot_symlink_path.exists() or snapshot_symlink_path.is_symlink():
+    snapshot_copy_path = code_dir / "snapshot"
+    # Check if directory already exists at the destination and remove it if necessary
+    if snapshot_copy_path.exists():
         try:
-            log.debug(f"Removing existing symlink or file at {snapshot_symlink_path}")
-            snapshot_symlink_path.unlink(missing_ok=True)
+            log.debug(f"Removing existing directory at {snapshot_copy_path}")
+            if snapshot_copy_path.is_symlink():
+                snapshot_copy_path.unlink(missing_ok=True)
+            else:
+                shutil.rmtree(snapshot_copy_path, ignore_errors=True)
         except Exception as e:
-            log.debug(f"Error removing existing symlink: {e}")
+            log.debug(f"Error removing existing directory: {e}")
             return None
 
     try:
         log.debug(
-            f"Creating symlink from {snapshot_symlink_path} to {snapshot_dir_path}"
+            f"Copying snapshot directory from {snapshot_dir_path} to {snapshot_copy_path}"
         )
-        # Use absolute paths for both source and destination
-        snapshot_symlink_path.symlink_to(
-            snapshot_dir_path.resolve().absolute(), target_is_directory=True
-        )
-        log.debug(f"Created symlink at {snapshot_symlink_path}")
-        return snapshot_symlink_path
+        # Copy the entire directory structure
+        shutil.copytree(snapshot_dir_path, snapshot_copy_path)
+        log.debug(f"Copied snapshot directory to {snapshot_copy_path}")
+        return snapshot_copy_path
     except Exception as e:
-        log.debug(f"Error creating symlink to snapshot directory: {e}")
+        log.debug(f"Error copying snapshot directory: {e}")
         return None
 
 
@@ -437,9 +438,9 @@ def setup_code_directory(
     # Always create the code directory
     code_dir = _create_code_directory(session_dir)
 
-    # Create symlink to snapshots if available
+    # Create copy ofsnapshots if available
     if snapshot is not None:
-        _create_snapshot_symlink(snapshot, code_dir)
+        _create_snapshot_copy(snapshot, code_dir)
 
     # Save git diff if enabled
     git_diff_path: Path | None = None
