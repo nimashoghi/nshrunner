@@ -12,6 +12,7 @@ dependencies = [
     "deepmerge",
     "nshconfig",
     "nshsnap>=0.12",
+    "GitPython",
 ]
 
 [project.optional-dependencies]

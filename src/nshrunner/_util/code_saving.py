@@ -3,12 +3,12 @@ from __future__ import annotations
 import inspect
 import logging
 import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from git import GitCommandError, InvalidGitRepositoryError, NoSuchPathError, Repo
 from nshsnap import SnapshotInfo
 
 log = logging.getLogger(__name__)
@@ -166,142 +166,103 @@ def _get_main_script() -> tuple[Path | None, Literal["script", "notebook"] | Non
     return None, None
 
 
-def _is_git_repo(path: Path) -> bool:
+def _save_git_diff(code_dir: Path) -> Path | None:
     """
-    Check if the given path is within a Git repository.
+    Save the git diff to the code directory if in a git repository.
 
     Args:
-        path: The path to check
+        code_dir: The code directory where the git diff should be saved
 
     Returns:
-        True if the path is within a Git repository, False otherwise
+        Path to the saved git diff file if successful, None otherwise
     """
+    cwd = Path.cwd()
+
     try:
-        # Try to get the Git root directory
-        result = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return result.returncode == 0
-    except (subprocess.SubprocessError, FileNotFoundError):
-        return False
+        # Create a single Repo instance to use for all Git operations
+        repo = Repo(cwd, search_parent_directories=True)
+        repo_root = Path(repo.working_dir)
+        log.debug(f"Detected Git repository at {repo_root}")
 
+        # Get the diff for tracked files using the same repo instance
+        tracked_diff = repo.git.diff("HEAD")
 
-def _get_git_root(path: Path) -> Path | None:
-    """
-    Get the root directory of the Git repository containing the given path.
+        # Get untracked files using the same repo instance
+        untracked_files = repo.untracked_files
 
-    Args:
-        path: A path within the Git repository
-
-    Returns:
-        The root directory of the Git repository, or None if not in a repository
-    """
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode == 0:
-            return Path(result.stdout.strip())
-        return None
-    except (subprocess.SubprocessError, FileNotFoundError):
-        return None
-
-
-def _is_untracked_file(repo_path: Path, file_path: Path) -> bool:
-    """
-    Check if a file is untracked in the Git repository.
-
-    Args:
-        repo_path: The path to the Git repository
-        file_path: The path to the file to check
-
-    Returns:
-        True if the file is untracked, False otherwise
-    """
-    try:
-        # Use git ls-files to check if the file is tracked
-        result = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(repo_path),
-                "ls-files",
-                "--error-unmatch",
-                str(file_path.relative_to(repo_path)),
-            ],
-            capture_output=True,
-            check=False,
-        )
-        # Return code 0 means the file is tracked, 1 means it's untracked
-        return result.returncode != 0
-    except (subprocess.SubprocessError, ValueError):
-        # If there's an error or the file is not relative to the repo, consider it untracked
-        return True
-
-
-def _get_git_diff(repo_path: Path) -> str | None:
-    """
-    Get the current Git diff for the repository.
-
-    Args:
-        repo_path: The path to the Git repository
-
-    Returns:
-        The Git diff as a string, or None if there was an error
-    """
-    try:
-        # Get the diff for tracked files
-        tracked_diff = subprocess.run(
-            ["git", "-C", str(repo_path), "diff", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        # Get the diff for untracked files
-        untracked_files = []
-        for f in repo_path.glob("**/*"):
-            if f.is_file() and _is_untracked_file(repo_path, f):
-                untracked_files.append(str(f))
-
-        untracked_diff_output = ""
+        # Process untracked files
+        combined_untracked_diff = []
         if untracked_files:
-            try:
-                # Get the diff for untracked files
-                untracked_diff = subprocess.run(
-                    [
-                        "git",
-                        "-C",
-                        str(repo_path),
-                        "diff",
-                        "--no-index",
-                        "--",
-                        "/dev/null",
-                    ]
-                    + untracked_files,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                # The --no-index command returns 1 if there are differences, which is expected
-                untracked_diff_output = (
-                    untracked_diff.stdout if untracked_diff.returncode in (0, 1) else ""
-                )
-            except (subprocess.SubprocessError, FileNotFoundError) as e:
-                log.debug(f"Error getting diff for untracked files: {e}")
+            log.debug(f"Found {len(untracked_files)} untracked files")
 
-        # Combine the diffs
-        combined_diff = tracked_diff.stdout + "\n" + untracked_diff_output
+            # Process untracked files in batches to maintain performance
+            BATCH_SIZE = 100
+            for i in range(0, len(untracked_files), BATCH_SIZE):
+                batch = untracked_files[i : i + BATCH_SIZE]
+                log.debug(f"Processing batch of {len(batch)} untracked files")
 
-        return combined_diff if combined_diff.strip() else None
-    except (subprocess.SubprocessError, FileNotFoundError) as e:
-        log.debug(f"Error getting Git diff: {e}")
+                try:
+                    # For untracked files, diff against /dev/null
+                    for file_path in batch:
+                        full_path = repo_root / file_path
+                        # Only include the file if it exists and is a regular file
+                        if full_path.exists() and full_path.is_file():
+                            try:
+                                file_diff = repo.git.diff(
+                                    "--no-index",
+                                    "--",
+                                    "/dev/null",
+                                    str(file_path),
+                                    check=False,
+                                )
+
+                                # Add to our collection
+                                if file_diff:
+                                    combined_untracked_diff.append(file_diff)
+                            except GitCommandError as e:
+                                # GitCommandError with return code 1 is expected for files with differences
+                                if e.status == 1 and e.stdout:
+                                    combined_untracked_diff.append(e.stdout)
+                                else:
+                                    log.debug(
+                                        f"Error getting diff for {file_path}: {e}"
+                                    )
+                except Exception as e:
+                    log.debug(f"Error processing batch of untracked files: {e}")
+                    # Continue with the next batch
+
+        # Combine all diffs
+        combined_diff = tracked_diff or ""
+        if combined_untracked_diff:
+            untracked_diff_output = "\n".join(combined_untracked_diff)
+            if combined_diff and untracked_diff_output:
+                combined_diff += "\n" + untracked_diff_output
+            else:
+                combined_diff = untracked_diff_output
+
+        # Create diff file path
+        diff_file = code_dir / "git_diff.patch"
+
+        # Always create the file for valid repositories, even if there are no changes
+        combined_diff = combined_diff.strip()
+        if combined_diff:
+            log.debug("Repository has changes, saving git diff")
+            with open(diff_file, "w") as f:
+                f.write(combined_diff)
+            log.debug(f"Saved Git diff to {diff_file}")
+        else:
+            log.debug("Repository is clean, creating empty git diff file")
+            # Create an empty file
+            diff_file.touch()
+            log.debug(f"Created empty git diff file at {diff_file}")
+
+        return diff_file
+
+    except (InvalidGitRepositoryError, NoSuchPathError, GitCommandError) as e:
+        log.debug(f"Not in a Git repository or error accessing Git: {e}")
+        return None
+    except Exception as e:
+        log.debug(f"Unexpected error processing Git repository: {e}")
         return None
 
 
@@ -361,50 +322,6 @@ def _create_snapshot_symlink(snapshot: SnapshotInfo, code_dir: Path) -> Path | N
     except Exception as e:
         log.debug(f"Error creating symlink to snapshot directory: {e}")
         return None
-
-
-def _save_git_diff(code_dir: Path) -> Path | None:
-    """
-    Save the git diff to the code directory if in a git repository.
-
-    Args:
-        code_dir: The code directory where the git diff should be saved
-
-    Returns:
-        Path to the saved git diff file if successful, None otherwise
-    """
-    # Check if we're in a Git repository and save the diff
-    cwd = Path.cwd()
-    if not _is_git_repo(cwd):
-        log.debug("Not in a Git repository")
-        return None
-
-    repo_root = _get_git_root(cwd)
-    if not repo_root:
-        log.debug("Failed to determine Git repository root")
-        return None
-
-    log.debug(f"Detected Git repository at {repo_root}")
-
-    # Get the Git diff
-    diff = _get_git_diff(repo_root)
-
-    # Create diff file path
-    diff_file = code_dir / "git_diff.patch"
-
-    # Always create the file for valid repositories, even if there are no changes
-    if diff:
-        log.debug("Repository has changes, saving git diff")
-        with open(diff_file, "w") as f:
-            f.write(diff)
-        log.debug(f"Saved Git diff to {diff_file}")
-    else:
-        log.debug("Repository is clean, creating empty git diff file")
-        # Create an empty file
-        diff_file.touch()
-        log.debug(f"Created empty git diff file at {diff_file}")
-
-    return diff_file
 
 
 def _save_main_script_file(
