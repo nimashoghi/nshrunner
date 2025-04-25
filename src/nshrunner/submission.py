@@ -24,3 +24,10 @@ class Submission:
 
     script: SubmissionScript | None = None
     """The script to run for the session."""
+
+    @property
+    def command_str(self) -> str:
+        """The command to run for the session."""
+        if self.script is None:
+            raise ValueError("No script available for this submission.")
+        return self.script.command_str
