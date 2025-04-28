@@ -618,14 +618,14 @@ files = [
 
 [[package]]
 name = "nshconfig"
-version = "0.44.0"
+version = "0.45.0"
 description = "Fully typed configuration management, powered by Pydantic"
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 files = [
-    {file = "nshconfig-0.44.0-py3-none-any.whl", hash = "sha256:ff17717bb4fc39800a8b8fb2af6ef6aa8e8fa8d7769d5c7a0d2556da34386225"},
-    {file = "nshconfig-0.44.0.tar.gz", hash = "sha256:69d5e48076d87471211d1ec34cc49ad46d735221ef9039b3d5f9b8c09e9a1ffc"},
+    {file = "nshconfig-0.45.0-py3-none-any.whl", hash = "sha256:1225e4eb02af23597ea665d9900e0caac8c856f63f3b86471ac37d3bf018069e"},
+    {file = "nshconfig-0.45.0.tar.gz", hash = "sha256:9575176fb821e8da2e61649f1442b2df7409cec10465e36d5825f86e20fc8507"},
 ]
 
 [package.dependencies]
