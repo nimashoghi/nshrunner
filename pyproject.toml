@@ -1,6 +1,6 @@
 [project]
 name = "nshrunner"
-version = "1.5.1"
+version = "1.6.0"
 description = ""
 authors = [{ name = "Nima Shoghi", email = "nimashoghi@gmail.com" }]
 requires-python = ">=3.9,<4.0"
