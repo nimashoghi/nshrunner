@@ -30,9 +30,9 @@ ruff = "*"
 ipykernel = "*"
 ipywidgets = "*"
 basedpyright = "*"
-pysnooper = "*"
 pytest = "*"
 pytest-cov = "*"
+nox = "*"
 
 [build-system]
 requires = ["poetry-core"]
