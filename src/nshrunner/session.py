@@ -147,7 +147,7 @@ class Session:
     @cached_property
     def submit_job_index(self) -> int | None:
         """Index of the current job in a job array, if applicable."""
-        if not (job_index := os.environ.get(_env.SUBMIT_JOB_INDEX)):
+        if not (job_index := os.environ.get(_env.JOB_ARRAY_JOB_INDEX)):
             return None
         return int(job_index)
 

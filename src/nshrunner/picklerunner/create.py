@@ -88,7 +88,7 @@ class SerializedMultiFunction(PathLike):
 
     def to_bash_command(
         self,
-        job_index_variable: str = _env.SUBMIT_JOB_INDEX,
+        job_index_variable: str = _env.JOB_ARRAY_JOB_INDEX,
         python_executable: str | None = None,
         environment: Mapping[str, str] | None = None,
         print_environment_info: bool = False,
@@ -178,7 +178,7 @@ def serialize_many(
 
     destdir = Path(destdir)
     for i, (args, kwargs) in enumerate(args_and_kwargs_list):
-        dest = destdir / f"{i+start_idx}.pkl"
+        dest = destdir / f"{i + start_idx}.pkl"
         serialized = serialize_single(dest, fn, args, kwargs)
         serialized_list.append(serialized)
 

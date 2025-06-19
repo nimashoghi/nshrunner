@@ -87,7 +87,7 @@ def set_default_envs(
     env: dict[str, str] = {}
 
     # Update the command to set JOB_INDEX to the job index variable (if exists)
-    env[_env.SUBMIT_JOB_INDEX] = str(job_index) if job_index is not None else ""
+    env[_env.JOB_ARRAY_JOB_INDEX] = str(job_index) if job_index is not None else ""
 
     # Set the local rank, global rank, and world size environment variables
     env[_env.SUBMIT_LOCAL_RANK] = str(local_rank)
@@ -141,7 +141,7 @@ def write_run_metadata_commands(
 
     setup_commands.append(f'mkdir -p "{meta_dir}"')
     setup_commands.append(
-        f'echo "${{{_env.SUBMIT_JOB_INDEX}}}" > "{meta_dir}/job_id.txt"'
+        f'echo "${{{_env.JOB_ARRAY_JOB_INDEX}}}" > "{meta_dir}/job_id.txt"'
     )
     setup_commands.append(f'env > "{meta_dir}/env.txt"')
 
@@ -156,7 +156,7 @@ if {is_worker_script}:
 else:
     meta_dir = os.path.join(meta_dir, 'meta')
 
-job_id = os.environ['{_env.SUBMIT_JOB_INDEX}']
+job_id = os.environ['{_env.JOB_ARRAY_JOB_INDEX}']
 env_vars = dict(os.environ)
 
 with open(os.path.join(meta_dir, 'run.json'), 'w') as f:
