@@ -219,3 +219,16 @@ class Session:
             f.write(script_contents)
         os.chmod(script_path, 0o755)
         log.info(f"Wrote exit script to {script_path}")
+
+    @cached_property
+    def kv(self):
+        """Get the key-value store for this session."""
+        from ._util.kv import GlobalKVStore
+
+        kv_store_dir = self.session_dir / "kv"
+        kv_store_dir.mkdir(parents=True, exist_ok=True)
+        job_index = self.submit_job_index or 0
+        kv_store_file = kv_store_dir / f"{job_index}.pkl"
+        log.info(f"Using key-value store at {kv_store_file}")
+
+        return GlobalKVStore(kv_store_file)
