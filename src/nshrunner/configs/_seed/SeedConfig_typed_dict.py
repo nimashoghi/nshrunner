@@ -10,6 +10,7 @@ __codegen__ = True
 
 
 # Schema entries
+@typ.final
 class SeedConfigTypedDict(typ.TypedDict, total=False):
     seed: typ.Required[int]
     """Seed for the random number generator."""

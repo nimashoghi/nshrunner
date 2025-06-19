@@ -12,6 +12,7 @@ __codegen__ = True
 
 
 # Schema entries
+@typ.final
 class LoggingConfigTypedDict(typ.TypedDict, total=False):
     """Configuration for screen session logging."""
 

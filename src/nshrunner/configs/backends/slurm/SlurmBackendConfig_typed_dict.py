@@ -51,6 +51,7 @@ Signals = typ.TypeAliasType(
 )
 
 
+@typ.final
 class SlurmMailConfigTypedDict(typ.TypedDict, total=False):
     """Configuration for email notifications."""
 
@@ -89,6 +90,7 @@ SlurmMailConfig = typ.TypeAliasType(
 
 
 # Schema entries
+@typ.final
 class SlurmBackendConfigTypedDict(typ.TypedDict, total=False):
     """Configuration for the SLURM backbone."""
 

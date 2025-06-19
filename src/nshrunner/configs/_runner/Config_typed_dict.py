@@ -16,6 +16,7 @@ __codegen__ = True
 ActiveSnapshot = typ.TypeAliasType("ActiveSnapshot", nshsnap._snapshot.ActiveSnapshot)
 
 
+@typ.final
 class SeedConfigTypedDict(typ.TypedDict, total=False):
     seed: typ.Required[int]
     """Seed for the random number generator."""
@@ -32,6 +33,7 @@ SeedConfig = typ.TypeAliasType(
 )
 
 
+@typ.final
 class SnapshotConfigTypedDict(typ.TypedDict, total=False):
     snapshot_dir: str | None
     """The directory to save snapshots to."""
@@ -55,6 +57,7 @@ SnapshotModuleInfo = typ.TypeAliasType(
 
 
 # Schema entries
+@typ.final
 class ConfigTypedDict(typ.TypedDict, total=False):
     working_dir: (
         str | typ.Literal["cwd"] | typ.Literal["tmp"] | typ.Literal["home-cache"]

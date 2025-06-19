@@ -15,6 +15,7 @@ __codegen__ = True
 # Definitions
 
 
+@typ.final
 class LoggingConfigTypedDict(typ.TypedDict, total=False):
     """Configuration for screen session logging."""
 
@@ -34,6 +35,7 @@ LoggingConfig = typ.TypeAliasType(
 
 
 # Schema entries
+@typ.final
 class ScreenBackendConfigTypedDict(typ.TypedDict, total=False):
     """Configuration for the GNU screen backbone."""
 

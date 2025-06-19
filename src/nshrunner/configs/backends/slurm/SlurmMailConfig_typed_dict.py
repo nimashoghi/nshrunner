@@ -12,6 +12,7 @@ __codegen__ = True
 
 
 # Schema entries
+@typ.final
 class SlurmMailConfigTypedDict(typ.TypedDict, total=False):
     """Configuration for email notifications."""
 
