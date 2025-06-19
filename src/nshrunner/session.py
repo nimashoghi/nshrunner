@@ -84,16 +84,16 @@ class Session:
     @cached_property
     def snapshot_dir(self) -> Path | None:
         """Directory path for the snapshot, if available."""
-        if snapshot_dir := os.environ.get(_env.SNAPSHOT_DIR):
-            return Path(snapshot_dir)
-        return None
+        if not (snapshot_dir := os.environ.get(_env.SNAPSHOT_DIR)):
+            return None
+        return Path(snapshot_dir)
 
     @cached_property
     def snapshot_modules(self) -> list[str] | None:
         """List of snapshot modules, if available."""
-        if snapshot_modules := os.environ.get(_env.SNAPSHOT_MODULES):
-            return snapshot_modules.split(",")
-        return None
+        if not (snapshot_modules := os.environ.get(_env.SNAPSHOT_MODULES)):
+            return None
+        return snapshot_modules.split(",")
 
     @cached_property
     def is_worker_script(self) -> bool:
@@ -103,14 +103,16 @@ class Session:
     @cached_property
     def main_script_path(self) -> Path | None:
         """Path to the saved main script or notebook, if available."""
-        if path := os.environ.get(_env.MAIN_SCRIPT_PATH):
-            return Path(path)
-        return None
+        if not (path := os.environ.get(_env.MAIN_SCRIPT_PATH)):
+            return None
+        return Path(path)
 
     @cached_property
     def main_script_type(self) -> Literal["script", "notebook"] | None:
         """Type of the main script (Python script or Jupyter notebook), if available."""
-        script_type_str = os.environ.get(_env.MAIN_SCRIPT_TYPE)
+        if not (script_type_str := os.environ.get(_env.MAIN_SCRIPT_TYPE)):
+            return None
+
         if script_type_str == "script":
             return "script"
         elif script_type_str == "notebook":
@@ -119,7 +121,7 @@ class Session:
             log.warning(
                 f"Unknown script type '{script_type_str}', expected 'script' or 'notebook'"
             )
-        return None
+            return None
 
     @cached_property
     def code_dir(self) -> Path | None:
@@ -131,23 +133,23 @@ class Session:
     @cached_property
     def git_diff_path(self) -> Path | None:
         """Path to the saved git diff file, if available."""
-        if path := os.environ.get(_env.GIT_DIFF_PATH):
-            return Path(path)
-        return None
+        if not (path := os.environ.get(_env.GIT_DIFF_PATH)):
+            return None
+        return Path(path)
 
     @cached_property
     def submit_base_dir(self) -> Path | None:
         """Base directory for job submission, if applicable."""
-        if path := os.environ.get(_env.SUBMIT_BASE_DIR):
-            return Path(path)
-        return None
+        if not (path := os.environ.get(_env.SUBMIT_BASE_DIR)):
+            return None
+        return Path(path)
 
     @cached_property
     def submit_job_index(self) -> int | None:
         """Index of the current job in a job array, if applicable."""
-        if job_index := os.environ.get(_env.SUBMIT_JOB_INDEX):
-            return int(job_index)
-        return None
+        if not (job_index := os.environ.get(_env.SUBMIT_JOB_INDEX)):
+            return None
+        return int(job_index)
 
     @cached_property
     def submit_timeout_signal(self) -> signal.Signals | None:
@@ -162,30 +164,30 @@ class Session:
     @cached_property
     def submit_local_rank(self) -> int | None:
         """Local rank of the current process, if applicable."""
-        if rank := os.environ.get(_env.SUBMIT_LOCAL_RANK):
-            return int(rank)
-        return None
+        if not (rank := os.environ.get(_env.SUBMIT_LOCAL_RANK)):
+            return None
+        return int(rank)
 
     @cached_property
     def submit_global_rank(self) -> int | None:
         """Global rank of the current process, if applicable."""
-        if rank := os.environ.get(_env.SUBMIT_GLOBAL_RANK):
-            return int(rank)
-        return None
+        if not (rank := os.environ.get(_env.SUBMIT_GLOBAL_RANK)):
+            return None
+        return int(rank)
 
     @cached_property
     def submit_world_size(self) -> int | None:
         """Total number of processes in the job, if applicable."""
-        if size := os.environ.get(_env.SUBMIT_WORLD_SIZE):
-            return int(size)
-        return None
+        if not (size := os.environ.get(_env.SUBMIT_WORLD_SIZE)):
+            return None
+        return int(size)
 
     @cached_property
     def exit_script_dir(self) -> Path | None:
         """Directory for exit scripts, if specified."""
-        if path := os.environ.get(_env.EXIT_SCRIPT_DIR):
-            return Path(path)
-        return None
+        if not (path := os.environ.get(_env.EXIT_SCRIPT_DIR)):
+            return None
+        return Path(path)
 
     @cached_property
     def submit_interface_module(self) -> str | None:
