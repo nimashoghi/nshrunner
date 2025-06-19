@@ -297,17 +297,16 @@ def callable_to_command(
         [(args, {}) for args in args_list],
         start_idx=1,  # Slurm job indices are 1-based
     )
-    match execution:
-        case {"mode": "sequential", **kwargs}:
-            command_inner = serialized_command.bash_command_sequential(
-                **cast(Any, kwargs)
-            )
-            del kwargs
-        case {"mode": "array", **kwargs}:
-            command_inner = serialized_command.to_bash_command(**cast(Any, kwargs))
-            del kwargs
-        case _:
-            raise ValueError(f"Invalid execution mode: {execution['mode']}")
+    if execution["mode"] == "sequential":
+        kwargs = {k: v for k, v in execution.items() if k != "mode"}
+        command_inner = serialized_command.bash_command_sequential(**cast(Any, kwargs))
+        del kwargs
+    elif execution["mode"] == "array":
+        kwargs = {k: v for k, v in execution.items() if k != "mode"}
+        command_inner = serialized_command.to_bash_command(**cast(Any, kwargs))
+        del kwargs
+    else:
+        raise ValueError(f"Invalid execution mode: {execution['mode']}")
 
     _write_helper_script(
         script_path,

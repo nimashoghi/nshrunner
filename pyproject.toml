@@ -3,7 +3,7 @@ name = "nshrunner"
 version = "1.5.1"
 description = ""
 authors = [{ name = "Nima Shoghi", email = "nimashoghi@gmail.com" }]
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.9,<4.0"
 readme = "README.md"
 dependencies = [
     "tqdm",
@@ -11,7 +11,7 @@ dependencies = [
     "cloudpickle",
     "deepmerge",
     "nshconfig",
-    "nshsnap>=0.12",
+    "nshsnap>=0.14",
     "GitPython",
     "flufl.lock",
 ]

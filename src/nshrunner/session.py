@@ -205,13 +205,12 @@ class Session:
         """
         if not self.exit_script_dir:
             error_msg = "No exit script directory specified"
-            match on_error:
-                case "raise":
-                    raise ValueError(error_msg)
-                case "warn":
-                    log.warning(error_msg)
-                case _:
-                    assert_never(on_error)
+            if on_error == "raise":
+                raise ValueError(error_msg)
+            elif on_error == "warn":
+                log.warning(error_msg)
+            else:
+                assert_never(on_error)
             return
 
         script_path = self.exit_script_dir / script_name

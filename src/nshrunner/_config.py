@@ -59,15 +59,14 @@ class Config(C.Config):
         return self.seed
 
     def _resolve_working_dir(self):
-        match self.working_dir:
-            case "cwd":
-                return Path.cwd() / "nshrunner"
-            case "tmp":
-                return Path("/tmp") / "nshrunner"
-            case "home-cache":
-                return Path.home() / ".cache" / "nshrunner"
-            case _:
-                return Path(self.working_dir)
+        if self.working_dir == "cwd":
+            return Path.cwd() / "nshrunner"
+        elif self.working_dir == "tmp":
+            return Path("/tmp") / "nshrunner"
+        elif self.working_dir == "home-cache":
+            return Path.home() / ".cache" / "nshrunner"
+        else:
+            return Path(self.working_dir)
 
     def _resolve_snapshot_config(self, session_dir: Path):
         if (snapshot := self.snapshot) in (False, None):
