@@ -165,8 +165,10 @@ class Runner(Generic[TReturn, Unpack[TArguments]]):
     ):
         runs, submission = self._setup_submission(runs, env=env)
         with with_env(submission.env):
-            for args in _tqdm_if_installed(runs):
-                yield self._wrapped_run_fn(*args)
+            for run_number, args in enumerate(_tqdm_if_installed(runs)):
+                with with_env({_env.JOB_ARRAY_JOB_INDEX: str(run_number)}):
+                    log.info(f"Running local job {run_number + 1}/{len(runs)}")
+                    yield self._wrapped_run_fn(*args)
 
     def local(
         self,
